@@ -25,7 +25,6 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
         types=["uniform", "uniform"],
         params=[[-2, 2], [-2, 2]],
         compute_QoIs=sigmoid_qoi,
-        n_out=2,
     )
     sampler.sampling(N=N, DOE_type=doe_type)
 
@@ -89,9 +88,9 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
     plt.savefig(f"plots/mm_sigmoid_prediction_{case_name}.png", dpi=150)
     plt.close()
 
-    print(f"✓ {case_name:15s} (R² = {r2:.4f}){sparsity_info}")
-    print(f"  Samples: plots/mm_sigmoid_samples_{case_name}.png")
-    print(f"  Predict: plots/mm_sigmoid_prediction_{case_name}.png\n")
+    print(f"[OK] {case_name:15s} (R² = {r2:.4f}){sparsity_info}")
+    print(f"     Samples: plots/mm_sigmoid_samples_{case_name}.png")
+    print(f"     Predict: plots/mm_sigmoid_prediction_{case_name}.png\n")
 
 
 def main() -> None:

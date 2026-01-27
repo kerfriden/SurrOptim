@@ -65,7 +65,6 @@ def run_case(
         types=["uniform", "uniform"],
         params=[[-2, 2], [-2, 2]],
         compute_QoIs=sigmoid_qoi,
-        n_out=2,
     )
     sampler.sampling(N=N_samples, DOE_type="QRS")
 
@@ -120,7 +119,7 @@ def run_case(
     plt.savefig(f"plots/mm_sigmoid_prediction_qrs_{case_name}.png", dpi=150)
     plt.close()
 
-    print(f"  ✓ {case_name.upper():6s} R² = {r2:.4f}")
+    print(f"  [OK] {case_name.upper():6s} R² = {r2:.4f}")
 
 
 def main() -> None:
