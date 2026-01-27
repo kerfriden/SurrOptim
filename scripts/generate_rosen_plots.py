@@ -23,8 +23,8 @@ def main() -> None:
 
     for doe, N in cases:
         sampler = sampler_cls(
-            types=["uniform", "uniform"],
-            params=[[-2, 2], [-2, 2]],
+            distributions=["uniform", "uniform"],
+            bounds=[[-2, 2], [-2, 2]],
             compute_QoIs=rosen_qoi,
             n_out=2,
         )

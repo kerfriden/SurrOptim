@@ -62,8 +62,8 @@ def run_case(
     """
     # Generate QRS samples
     sampler = sampler_cls(
-        types=["uniform", "uniform"],
-        params=[[-2, 2], [-2, 2]],
+        distributions=["uniform", "uniform"],
+        bounds=[[-2, 2], [-2, 2]],
         compute_QoIs=sigmoid_qoi,
         DOE_type="QRS",
     )

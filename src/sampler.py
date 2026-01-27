@@ -22,8 +22,8 @@ class sampler_cls:
     Sampler for parametric studies with multiple distribution types and DOE strategies.
 
     Attributes:
-        types: List of distribution types for each parameter
-        params: List of distribution parameters for each parameter
+        distributions: List of distribution types for each parameter
+        bounds: List of distribution parameters for each parameter
         active_keys: Optional list of parameter names
         compute_QoIs: Callable that computes QoI from parameters
         plot_solution: Optional callable for visualization
@@ -32,8 +32,8 @@ class sampler_cls:
 
     def __init__(
         self,
-        types: List[str],
-        params: List[list],
+        distributions: List[str],
+        bounds: List[list],
         active_keys: Optional[List[str]] = None,
         compute_QoIs: Optional[Callable] = None,
         plot_solution: Optional[Callable] = None,
@@ -45,8 +45,8 @@ class sampler_cls:
         Initialize sampler with distribution specifications.
 
         Args:
-            types: List of distribution types ('uniform', 'log_uniform', 'normal', 'lognormal')
-            params: List of [param1, param2] for each dimension
+            distributions: List of distribution types ('uniform', 'log_uniform', 'normal', 'lognormal')
+            bounds: List of [param1, param2] for each dimension
             active_keys: Optional parameter names
             compute_QoIs: Function(params_dict) -> QoI array
             plot_solution: Optional visualization function
@@ -55,20 +55,20 @@ class sampler_cls:
             DOE_type: Design of Experiments type ('PRS', 'LHS', 'QRS', 'SG')
 
         Raises:
-            ValueError: If types and params have mismatched lengths
+            ValueError: If distributions and bounds have mismatched lengths
         """
-        if len(types) != len(params):
-            raise ValueError(f"Length mismatch: types ({len(types)}) vs params ({len(params)})")
+        if len(distributions) != len(bounds):
+            raise ValueError(f"Length mismatch: distributions ({len(distributions)}) vs bounds ({len(bounds)})")
 
         # Validate all distribution types
-        for dist_type in types:
+        for dist_type in distributions:
             try:
                 DistributionFactory.create(dist_type)
             except ValueError as e:
                 raise ValueError(f"Invalid distribution type: {e}")
 
-        self.types = types
-        self.params = params
+        self.distributions = distributions
+        self.bounds = bounds
         self.active_keys = active_keys
         self.compute_QoIs = compute_QoIs
         self.seed = int(seed) if seed is not None else None
@@ -77,15 +77,15 @@ class sampler_cls:
         self.DOE_type = DOE_type
 
         # Create distribution strategy instances
-        self.distributions = [DistributionFactory.create(t) for t in types]
+        self.distribution_strategies = [DistributionFactory.create(t) for t in distributions]
 
         # Print initialization info
         print("Building your FEA sampler...")
-        for i in range(len(self.params)):
+        for i in range(len(self.bounds)):
             if self.active_keys is not None:
                 print(f"parameter dimension {i}: {self.active_keys[i]}")
-            print(f"distribution type for dimension {i}: {self.types[i]}")
-            print(f"params of distribution for dimension {i}: {self.params[i]}")
+            print(f"distribution type for dimension {i}: {self.distributions[i]}")
+            print(f"bounds of distribution for dimension {i}: {self.bounds[i]}")
 
         # Auto-detect n_out if not provided
         if n_out is None and compute_QoIs is not None:
@@ -125,11 +125,11 @@ class sampler_cls:
 
     def _get_center_point(self) -> np.ndarray:
         """Get center point in physical space based on distribution types."""
-        X = np.zeros((1, len(self.params)))
+        X = np.zeros((1, len(self.bounds)))
 
-        for i in range(len(self.params)):
-            dist_type = self.types[i]
-            param = self.params[i]
+        for i in range(len(self.bounds)):
+            dist_type = self.distributions[i]
+            param = self.bounds[i]
 
             if dist_type == 'uniform':
                 X[0, i] = (param[0] + param[1]) / 2
@@ -167,7 +167,7 @@ class sampler_cls:
             if self.sampler_doe is not None and not as_additional_points:
                 print(f"Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
             try:
-                self.sampler_doe = DOEFactory.create(self.DOE_type, len(self.params), seed=self.seed)
+                self.sampler_doe = DOEFactory.create(self.DOE_type, len(self.bounds), seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
             X_normalised = self.sampler_doe.sample(N, as_additional_points=False)
@@ -185,7 +185,7 @@ class sampler_cls:
             Y = None
 
         sample_type = "additional samples" if as_additional_points and self.X_normalised is not None else "samples"
-        print(f'Start computing {len(X_normalised)} {sample_type} in parametric dimension {len(self.params)} using {self.DOE_type}')
+        print(f'Start computing {len(X_normalised)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}')
 
         # Evaluate samples
         if sample_in_batch and self.compute_QoIs is not None:
@@ -202,8 +202,8 @@ class sampler_cls:
         """Transform samples from [-1,1]^n to physical space."""
         X = np.zeros_like(X_normalised)
 
-        for j in range(len(self.params)):
-            X[:, j] = self.distributions[j].denormalise(X_normalised[:, j], self.params[j])
+        for j in range(len(self.bounds)):
+            X[:, j] = self.distribution_strategies[j].denormalise(X_normalised[:, j], self.bounds[j])
 
         return X
 
@@ -211,8 +211,8 @@ class sampler_cls:
         """Transform samples from physical space to [-1,1]^n."""
         X_normalised = np.zeros_like(X)
 
-        for j in range(len(self.params)):
-            X_normalised[:, j] = self.distributions[j].normalise(X[:, j], self.params[j])
+        for j in range(len(self.bounds)):
+            X_normalised[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
 
         return X_normalised
 
@@ -299,7 +299,7 @@ class sampler_cls:
         """
         from util import prediction_plot
 
-        if len(self.params) not in [1, 2]:
+        if len(self.bounds) not in [1, 2]:
             raise ValueError("Can only plot 1D or 2D problems")
 
         X_plot = self.X_normalised if normalised else self.X

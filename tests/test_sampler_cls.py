@@ -100,12 +100,12 @@ def simple_qoi_1d(X):
 def test_sampler_uniform():
     """Test sampler with uniform distribution"""
     print("\n=== Test Sampler: Uniform Distribution ===")
-    types = ['uniform', 'uniform']
-    params = [[-2, 2], [-2, 2]]
+    distributions = ['uniform', 'uniform']
+    bounds = [[-2, 2], [-2, 2]]
     
     sampler = sampler_cls(
-        types=types,
-        params=params,
+        distributions=distributions,
+        bounds=bounds,
         compute_QoIs=simple_qoi,
         n_out=2
     )
@@ -128,12 +128,12 @@ def test_sampler_uniform():
 def test_sampler_loguniform():
     """Test sampler with log-uniform distribution"""
     print("\n=== Test Sampler: Log-Uniform Distribution ===")
-    types = ['log_uniform']
-    params = [[0, 2]]  # log space bounds: [e^0, e^2] = [1, 7.389...]
+    distributions = ['log_uniform']
+    bounds = [[0, 2]]  # log space bounds: [e^0, e^2] = [1, 7.389...]
     
     sampler = sampler_cls(
-        types=types,
-        params=params,
+        distributions=distributions,
+        bounds=bounds,
         compute_QoIs=simple_qoi_1d,
         n_out=2
     )
@@ -167,12 +167,12 @@ def test_sampler_sigmoid_qoi():
         sig = 1.0 / (1.0 + np.exp(-(x + y**2)))
         return np.vstack([s, sig]).T
 
-    types = ['uniform', 'uniform']
-    params = [[-2, 2], [-2, 2]]
+    distributions = ['uniform', 'uniform']
+    bounds = [[-2, 2], [-2, 2]]
 
     sampler = sampler_cls(
-        types=types,
-        params=params,
+        distributions=distributions,
+        bounds=bounds,
         compute_QoIs=sigmoid_qoi,
         n_out=2
     )
@@ -190,12 +190,12 @@ def test_sampler_sigmoid_qoi():
 def test_sampler_normalisation():
     """Test normalization and denormalization"""
     print("\n=== Test Normalization/Denormalization ===")
-    types = ['uniform', 'log_uniform']
-    params = [[0, 10], [0, 5]]
+    distributions = ['uniform', 'log_uniform']
+    bounds = [[0, 10], [0, 5]]
     
     sampler = sampler_cls(
-        types=types,
-        params=params,
+        distributions=distributions,
+        bounds=bounds,
         n_out=1
     )
     
@@ -224,12 +224,12 @@ def test_sampler_normalisation():
 def test_sampler_incremental_sampling():
     """Test incremental sampling with as_additional_points"""
     print("\n=== Test Incremental Sampling ===")
-    types = ['uniform']
-    params = [[0, 1]]
+    distributions = ['uniform']
+    bounds = [[0, 1]]
     
     sampler = sampler_cls(
-        types=types,
-        params=params,
+        distributions=distributions,
+        bounds=bounds,
         compute_QoIs=simple_qoi_1d,
         n_out=2
     )
@@ -264,12 +264,12 @@ def test_doe_additional_points():
 def test_sampler_sg():
     """Test sampler with sparse grid DOE"""
     print("\n=== Test Sampler: Sparse Grid ===")
-    types = ['uniform', 'uniform']
-    params = [[-2, 2], [-2, 2]]
+    distributions = ['uniform', 'uniform']
+    bounds = [[-2, 2], [-2, 2]]
     
     sampler = sampler_cls(
-        types=types,
-        params=params,
+        distributions=distributions,
+        bounds=bounds,
         compute_QoIs=simple_qoi,
         n_out=2
     )
@@ -374,8 +374,8 @@ def plot_all_tests():
     # Test 5: Uniform sampler with QoI coloring
     print("Plotting Uniform distribution with QoI response...")
     sampler_uniform = sampler_cls(
-        types=['uniform', 'uniform'],
-        params=[[0, 1], [0, 2]],
+        distributions=['uniform', 'uniform'],
+        bounds=[[0, 1], [0, 2]],
         compute_QoIs=simple_qoi,
         n_out=2
     )

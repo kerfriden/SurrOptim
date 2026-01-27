@@ -22,8 +22,8 @@ def sigmoid_qoi(X: np.ndarray) -> np.ndarray:
 
 def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical: np.ndarray, grid_points_norm: np.ndarray, Xg_phys: np.ndarray, Yg_phys: np.ndarray, use_normalised: bool = True) -> None:
     sampler = sampler_cls(
-        types=["uniform", "uniform"],
-        params=[[-2, 2], [-2, 2]],
+        distributions=["uniform", "uniform"],
+        bounds=[[-2, 2], [-2, 2]],
         compute_QoIs=sigmoid_qoi,
         DOE_type=doe_type,
     )

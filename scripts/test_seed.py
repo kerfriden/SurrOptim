@@ -9,11 +9,11 @@ def test_qoi(X):
 
 # Test 1: Same seed gives same samples
 print('Test 1: Same seed = reproducible results')
-s1 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=42)
+s1 = sampler_cls(distributions=['uniform', 'uniform'], bounds=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=42)
 s1.sampling(N=5, DOE_type='QRS')
 X1 = s1.X.copy()
 
-s2 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=42)
+s2 = sampler_cls(distributions=['uniform', 'uniform'], bounds=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=42)
 s2.sampling(N=5, DOE_type='QRS')
 X2 = s2.X.copy()
 
@@ -23,7 +23,7 @@ print(f'X2[0] = {X2[0]}')
 
 # Test 2: Different seed gives different samples
 print('\nTest 2: Different seed = different results')
-s3 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=123)
+s3 = sampler_cls(distributions=['uniform', 'uniform'], bounds=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=123)
 s3.sampling(N=5, DOE_type='QRS')
 X3 = s3.X.copy()
 
@@ -32,11 +32,11 @@ print(f'X3[0] = {X3[0]}')
 
 # Test 3: No seed gives random results each time
 print('\nTest 3: No seed = random behavior')
-s4 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi)
+s4 = sampler_cls(distributions=['uniform', 'uniform'], bounds=[[-1,1], [-1,1]], compute_QoIs=test_qoi)
 s4.sampling(N=5, DOE_type='LHS')
 X4 = s4.X.copy()
 
-s5 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi)
+s5 = sampler_cls(distributions=['uniform', 'uniform'], bounds=[[-1,1], [-1,1]], compute_QoIs=test_qoi)
 s5.sampling(N=5, DOE_type='LHS')
 X5 = s5.X.copy()
 
