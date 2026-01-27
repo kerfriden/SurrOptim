@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from sampler import sampler_cls
-from util import prediction_plot
+from surroptim.sampler import sampler_cls
+from surroptim.util import prediction_plot
 
 
 def rosen_qoi(X: np.ndarray) -> np.ndarray:

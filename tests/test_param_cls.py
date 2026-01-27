@@ -3,7 +3,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
-from param_processor import Params_cls
+from surroptim.param_processor import Params_cls
 
 class DemoParams(Params_cls):
     def __init__(self):

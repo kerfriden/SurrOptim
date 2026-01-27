@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from sparse_grid import (
+from surroptim.sparse_grid import (
     clenshaw_curtis_compute, generate_sparse_grid, compute_n_from_level,
     generate_delta_grid, generate_multi_index, generate_list_orders_dim
 )

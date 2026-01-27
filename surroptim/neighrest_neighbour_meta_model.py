@@ -5,7 +5,7 @@ This module provides a k-NN regressor wrapper around sklearn's KNeighborsRegress
 """
 
 import numpy as np
-from meta_models import metamodel
+from surroptim.meta_models import metamodel
 
 try:
     from sklearn.neighbors import KNeighborsRegressor

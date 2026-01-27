@@ -1,5 +1,5 @@
 import numpy as np
-from util import r2_score_simple
+from surroptim.util import r2_score_simple
 
 
 class metamodel:

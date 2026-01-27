@@ -5,9 +5,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from sampler import sampler_cls
+from surroptim.sampler import sampler_cls
 from polynomial_meta_models import polynomial_ridge_regressor, polynomial_lasso_regressor
-from util import prediction_plot
+from surroptim.util import prediction_plot
 
 
 def sigmoid_qoi(X: np.ndarray) -> np.ndarray:

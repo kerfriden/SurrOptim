@@ -1,6 +1,6 @@
 """Test seed functionality in sampler."""
 import numpy as np
-from sampler import sampler_cls
+from surroptim.sampler import sampler_cls
 
 
 def test_qoi(X):

@@ -6,7 +6,7 @@ This module provides neural network-based metamodel regressors with single hidde
 
 import numpy as np
 from typing import Optional, Callable
-from meta_models import metamodel
+from surroptim.meta_models import metamodel
 
 try:
     import torch

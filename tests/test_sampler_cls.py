@@ -4,9 +4,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sampler import sampler_cls
-from DOE import DOE_cls
-from util import prediction_plot, surf_plot
+from surroptim.sampler import sampler_cls
+from surroptim.DOE import DOE_cls
+from surroptim.util import prediction_plot, surf_plot
 
 
 def test_doe_prs():

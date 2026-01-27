@@ -1,7 +1,7 @@
 """Tests for distribution strategies."""
 import numpy as np
 
-from src.distributions import UniformDistribution, LogUniformDistribution
+from surroptim.distributions import UniformDistribution, LogUniformDistribution
 
 
 class TestUniformDistribution:

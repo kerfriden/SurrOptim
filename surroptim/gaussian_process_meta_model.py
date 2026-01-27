@@ -6,7 +6,7 @@ with RBF kernel and white noise for robust inference.
 """
 
 import numpy as np
-from meta_models import metamodel
+from surroptim.meta_models import metamodel
 
 try:
     from sklearn.gaussian_process import GaussianProcessRegressor

@@ -138,7 +138,7 @@ class SGStrategy(DOEStrategy):
         if N <= 0:
             raise ValueError(f"Refinement level must be positive, got {N}")
 
-        from sparse_grid import generate_sparse_grid
+        from surroptim.sparse_grid import generate_sparse_grid
 
         # N represents the refinement level for sparse grids; already in [-1,1]
         X = generate_sparse_grid(self.dim, N)

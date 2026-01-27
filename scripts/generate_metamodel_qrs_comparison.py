@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from sampler import sampler_cls
+from surroptim.sampler import sampler_cls
 from gaussian_process_meta_model import GP_regressor
 
 try:
@@ -23,7 +23,7 @@ except ImportError:
     print("Warning: PyTorch not available, skipping Neural Network case")
 
 from neighrest_neighbour_meta_model import NNeigh_regressor
-from util import prediction_plot
+from surroptim.util import prediction_plot
 
 
 def sigmoid_qoi(X: np.ndarray) -> np.ndarray:

@@ -5,9 +5,9 @@ try:
 except ImportError:
     SklearnLasso = None
 
-from meta_models import metamodel
-from polynomials import monomials, generate_multi_index, poly_basis_multi_index
-from sparse_grid import generate_list_orders_dim
+from surroptim.meta_models import metamodel
+from surroptim.polynomials import monomials, generate_multi_index, poly_basis_multi_index
+from surroptim.sparse_grid import generate_list_orders_dim
 
 
 class polynomial_regressor(metamodel):

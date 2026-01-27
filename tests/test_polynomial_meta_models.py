@@ -1,7 +1,7 @@
 import numpy as np
 
-from polynomial_meta_models import polynomial_lasso_regressor, polynomial_ridge_regressor
-from util import r2_score_simple
+from surroptim.polynomial_meta_models import polynomial_lasso_regressor, polynomial_ridge_regressor
+from surroptim.util import r2_score_simple
 
 
 def sigmoid_qoi(X: np.ndarray) -> np.ndarray:
