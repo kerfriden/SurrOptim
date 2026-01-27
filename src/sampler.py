@@ -94,8 +94,8 @@ class sampler_cls:
         if compute_QoIs is not None:
             print(f"n_out: {self.n_out}")
 
-        # Storage for samples (X is computed on-demand from X_normalised)
-        self.X_normalised: Optional[np.ndarray] = None
+        # Storage for samples (X is computed on-demand from X_reference)
+        self.X_reference: Optional[np.ndarray] = None
         self.Y: Optional[np.ndarray] = None
         self.sampler_doe: Optional[object] = None
 
@@ -103,10 +103,10 @@ class sampler_cls:
 
     @property
     def X(self) -> Optional[np.ndarray]:
-        """Denormalized physical-space samples (computed from X_normalised on demand)."""
-        if self.X_normalised is None:
+        """Denormalized physical-space samples (computed from X_reference on demand)."""
+        if self.X_reference is None:
             return None
-        return self._denormalise_samples(self.X_normalised)
+        return self._denormalise_samples(self.X_reference)
 
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs by calling compute_QoIs at center point."""
@@ -145,7 +145,6 @@ class sampler_cls:
     def sampling(
         self,
         N: int,
-        DOE_type: str = 'PRS',
         as_additional_points: bool = False,
         plot: bool = False,
         sample_in_batch: bool = False,
@@ -170,22 +169,22 @@ class sampler_cls:
                 self.sampler_doe = DOEFactory.create(self.DOE_type, len(self.bounds), seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
-            X_normalised = self.sampler_doe.sample(N, as_additional_points=False)
+            X_reference = self.sampler_doe.sample(N, as_additional_points=False)
         else:
             # Reuse existing DOE sampler and append points
-            X_normalised = self.sampler_doe.sample(N, as_additional_points=True)
+            X_reference = self.sampler_doe.sample(N, as_additional_points=True)
 
         # Denormalize samples
-        X = self._denormalise_samples(X_normalised)
+        X = self._denormalise_samples(X_reference)
 
         # Compute QoIs
         if self.n_out is not None:
-            Y = np.zeros((len(X_normalised), self.n_out))
+            Y = np.zeros((len(X_reference), self.n_out))
         else:
             Y = None
 
-        sample_type = "additional samples" if as_additional_points and self.X_normalised is not None else "samples"
-        print(f'Start computing {len(X_normalised)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}')
+        sample_type = "additional samples" if as_additional_points and self.X_reference is not None else "samples"
+        print(f'Start computing {len(X_reference)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}')
 
         # Evaluate samples
         if sample_in_batch and self.compute_QoIs is not None:
@@ -196,7 +195,7 @@ class sampler_cls:
         print("... done sampling")
 
         # Store results
-        self._store_results(X_normalised, X, Y, as_additional_points)
+        self._store_results(X_reference, X, Y, as_additional_points)
 
     def _denormalise_samples(self, X_normalised: np.ndarray) -> np.ndarray:
         """Transform samples from [-1,1]^n to physical space."""
@@ -224,7 +223,14 @@ class sampler_cls:
         if self.active_keys is not None:
             raise NotImplementedError("Batch evaluation not yet implemented for dimension mapping")
 
-        return self.compute_QoIs(X)
+        try:
+            return self.compute_QoIs(X)
+        except TypeError as e:
+            raise TypeError(
+                f"QoI evaluation failed: {e}. "
+                f"Expected array input, but the QoI might be expecting a dict (active_keys={self.active_keys}). "
+                f"Ensure QoI signature matches the input type."
+            ) from e
 
     def _evaluate_sequential(self, X: np.ndarray, plot: bool = False) -> Optional[np.ndarray]:
         """Evaluate samples sequentially with optional visualization."""
@@ -234,11 +240,27 @@ class sampler_cls:
         Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
 
         for i in range(len(X)):
-            if self.active_keys is not None:
-                params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
-                Y[i, :] = self.compute_QoIs(params_dict)
-            else:
-                Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
+            try:
+                if self.active_keys is not None:
+                    params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
+                    Y[i, :] = self.compute_QoIs(params_dict)
+                else:
+                    Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
+            except TypeError as e:
+                if self.active_keys is not None:
+                    raise TypeError(
+                        f"QoI evaluation failed at sample {i}: {e}. "
+                        f"Expected dict input (active_keys={self.active_keys}), "
+                        f"but QoI might be expecting array. "
+                        f"Ensure QoI signature accepts: {{{', '.join(repr(k) for k in self.active_keys)}: float}}"
+                    ) from e
+                else:
+                    raise TypeError(
+                        f"QoI evaluation failed at sample {i}: {e}. "
+                        f"Expected array input (active_keys=None), "
+                        f"but QoI might be expecting dict. "
+                        f"Pass active_keys parameter if QoI expects named parameters."
+                    ) from e
 
             if plot and self.plot_solution is not None:
                 self.plot_solution()
@@ -247,17 +269,17 @@ class sampler_cls:
 
     def _store_results(
         self,
-        X_normalised: np.ndarray,
+        X_reference: np.ndarray,
         X: np.ndarray,
         Y: Optional[np.ndarray],
         as_additional_points: bool,
     ) -> None:
         """Store sampling results, optionally appending to existing data."""
-        if self.X_normalised is None or not as_additional_points:
-            self.X_normalised = X_normalised
+        if self.X_reference is None or not as_additional_points:
+            self.X_reference = X_reference
             self.Y = Y
         else:
-            self.X_normalised = np.concatenate((self.X_normalised, X_normalised), axis=0)
+            self.X_reference = np.concatenate((self.X_reference, X_reference), axis=0)
             if Y is not None and self.Y is not None:
                 self.Y = np.concatenate((self.Y, Y), axis=0)
 
@@ -302,7 +324,7 @@ class sampler_cls:
         if len(self.bounds) not in [1, 2]:
             raise ValueError("Can only plot 1D or 2D problems")
 
-        X_plot = self.X_normalised if normalised else self.X
+        X_plot = self.X_reference if normalised else self.X
 
         xlabel = None
         ylabel = None

@@ -28,7 +28,7 @@ def main() -> None:
             compute_QoIs=rosen_qoi,
             n_out=2,
         )
-        sampler.sampling(N=N, DOE_type=doe)
+        sampler.sampling(N=N)
         prediction_plot(
             X=sampler.X,
             y=sampler.Y[:, 1],

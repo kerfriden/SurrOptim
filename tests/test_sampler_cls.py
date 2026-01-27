@@ -110,7 +110,7 @@ def test_sampler_uniform():
         n_out=2
     )
     
-    sampler.sampling(N=20, DOE_type='PRS')
+    sampler.sampling(N=20)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     assert sampler.X.shape == (20, 2), "Sample shape mismatch"
@@ -138,7 +138,7 @@ def test_sampler_loguniform():
         n_out=2
     )
     
-    sampler.sampling(N=20, DOE_type='PRS')
+    sampler.sampling(N=20)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     print(f"Sample range: [{np.min(sampler.X):.6f}, {np.max(sampler.X):.6f}]")
@@ -177,7 +177,7 @@ def test_sampler_sigmoid_qoi():
         n_out=2
     )
 
-    sampler.sampling(N=20, DOE_type='QRS')
+    sampler.sampling(N=20)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     assert sampler.X.shape == (20, 2)
@@ -235,12 +235,12 @@ def test_sampler_incremental_sampling():
     )
     
     # First batch
-    sampler.sampling(N=5, DOE_type='PRS', as_additional_points=False)
+    sampler.sampling(N=5, as_additional_points=False)
     print(f"After first sampling: {sampler.X.shape}")
     assert sampler.X.shape == (5, 1), "First batch shape mismatch"
     
     # Second batch as additional
-    sampler.sampling(N=5, DOE_type='PRS', as_additional_points=True)
+    sampler.sampling(N=5, as_additional_points=True)
     print(f"After second sampling: {sampler.X.shape}")
     assert sampler.X.shape == (10, 1), "Incremental sampling failed"
     print("✓ Incremental sampling test passed")
@@ -274,7 +274,7 @@ def test_sampler_sg():
         n_out=2
     )
     
-    sampler.sampling(N=3, DOE_type='SG')
+    sampler.sampling(N=3)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     assert sampler.X.shape[1] == 2, "Dimension mismatch"
@@ -379,7 +379,7 @@ def plot_all_tests():
         compute_QoIs=simple_qoi,
         n_out=2
     )
-    sampler_uniform.sampling(N=30, DOE_type='LHS')
+    sampler_uniform.sampling(N=30)
     scatter = axes[1, 1].scatter(sampler_uniform.X[:, 0], sampler_uniform.X[:, 1], 
                                   c=sampler_uniform.Y[:, 0], cmap='viridis', s=80, alpha=0.7)
     axes[1, 1].set_title('Uniform Distribution (colored by Sum QoI)', fontweight='bold')
