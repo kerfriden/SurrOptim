@@ -5,15 +5,27 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "suroptim"
 version = "0.1.0"
-description = "Simple optimization utilities."
+description = "Simple optimization utilities with surrogate modeling and design of experiments."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "kerfriden" }]
 license = { text = "MIT" }
-dependencies = []
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+]
 
-[tool.setuptools]
-package-dir = { "" = "src" }
+[project.optional-dependencies]
+ml = ["scikit-learn>=1.0"]
+nn = ["torch>=2.0"]
+plotting = ["matplotlib>=3.5"]
+dev = ["pytest>=7.0"]
+all = [
+    "scikit-learn>=1.0",
+    "torch>=2.0",
+    "matplotlib>=3.5",
+    "pytest>=7.0",
+]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]

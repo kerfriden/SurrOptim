@@ -3,9 +3,12 @@ pyproject.toml
 src/suroptim.egg-info/PKG-INFO
 src/suroptim.egg-info/SOURCES.txt
 src/suroptim.egg-info/dependency_links.txt
+src/suroptim.egg-info/requires.txt
 src/suroptim.egg-info/top_level.txt
 tests/test_QoI_cls.py
 tests/test_distributions.py
+tests/test_metamodels_all.py
 tests/test_param_cls.py
+tests/test_polynomial_meta_models.py
 tests/test_sampler_cls.py
 tests/test_sparse_grid.py
