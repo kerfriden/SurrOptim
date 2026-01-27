@@ -96,9 +96,10 @@ def run_case(
     Z_pred = preds[:, 1].reshape(Xg_phys.shape)
     Z_true = sigmoid_qoi(grid_points_physical)[:, 1].reshape(Xg_phys.shape)
 
-    # Compute R² on test set
-    test_r2 = np.mean((Z_true.ravel() - Z_pred.ravel()) ** 2)
-    r2_simple = 1.0 - test_r2 / np.var(Z_true)
+    # Compute R²
+    ss_res = np.sum((Z_true.ravel() - Z_pred.ravel()) ** 2)
+    ss_tot = np.sum((Z_true.ravel() - np.mean(Z_true.ravel())) ** 2)
+    r2 = 1.0 - (ss_res / ss_tot)
 
     # Plot on physical space
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
@@ -112,16 +113,14 @@ def run_case(
     cs1 = axes[1].contourf(Xg_phys, Yg_phys, Z_pred, levels=30, cmap="viridis")
     fig.colorbar(cs1, ax=axes[1], label="predicted")
     axes[1].scatter(sampler.X[:, 0], sampler.X[:, 1], s=30, alpha=0.6, c='red', edgecolors='k', linewidth=0.5)
-    axes[1].set_title(f"{case_name.upper()} prediction (R²={r2_simple:.3f})")
+    axes[1].set_title(f"{case_name.upper()} prediction\nR² = {r2:.4f}")
     axes[1].set_xlabel("x")
 
     plt.tight_layout()
     plt.savefig(f"plots/mm_sigmoid_prediction_qrs_{case_name}.png", dpi=150)
     plt.close()
 
-    print(f"  ✓ {case_name.upper()} R² = {r2_simple:.3f}")
-    print(f"    Saved: plots/mm_sigmoid_samples_qrs_{case_name}.png")
-    print(f"            plots/mm_sigmoid_prediction_qrs_{case_name}.png\n")
+    print(f"  ✓ {case_name.upper():6s} R² = {r2:.4f}")
 
 
 def main() -> None:

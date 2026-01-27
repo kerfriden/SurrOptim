@@ -36,6 +36,17 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
     
     model.train(X_train, sampler.Y)
 
+    # Extract sparsity info for lasso models (capture from training output)
+    sparsity_info = ""
+    if case_name == "lhs_lasso" and hasattr(model, 'coeff_'):
+        coeff = model.coeff_
+        if coeff.ndim == 2:
+            coeff = coeff[0]
+        n_nonzero = np.count_nonzero(coeff)
+        n_total = coeff.size
+        sparsity_ratio = (n_total - n_nonzero) / n_total
+        sparsity_info = f"\nSparsity: {sparsity_ratio:.1%}"
+
     # Plot training samples (colored by sigmoid output) in physical space
     prediction_plot(
         X=sampler.X,
@@ -54,6 +65,11 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
     Z_pred = preds[:, 1].reshape(Xg_phys.shape)
     Z_true = sigmoid_qoi(grid_points_physical)[:, 1].reshape(Xg_phys.shape)
 
+    # Compute R²
+    ss_res = np.sum((Z_true.ravel() - Z_pred.ravel()) ** 2)
+    ss_tot = np.sum((Z_true.ravel() - np.mean(Z_true.ravel())) ** 2)
+    r2 = 1.0 - (ss_res / ss_tot)
+
     # Plot on physical space
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
     cs0 = axes[0].contourf(Xg_phys, Yg_phys, Z_true, levels=30, cmap="viridis")
@@ -66,14 +82,16 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
     cs1 = axes[1].contourf(Xg_phys, Yg_phys, Z_pred, levels=30, cmap="viridis")
     fig.colorbar(cs1, ax=axes[1], label="predicted")
     axes[1].scatter(sampler.X[:, 0], sampler.X[:, 1], s=30, alpha=0.6, c='red', edgecolors='k', linewidth=0.5)
-    axes[1].set_title(f"Metamodel prediction ({case_name})")
+    axes[1].set_title(f"{case_name} prediction\nR² = {r2:.4f}{sparsity_info}")
     axes[1].set_xlabel("x")
 
     plt.tight_layout()
     plt.savefig(f"plots/mm_sigmoid_prediction_{case_name}.png", dpi=150)
     plt.close()
 
-    print(f"Saved plots for {case_name} ({space_label}) -> plots/mm_sigmoid_samples_{case_name}.png and plots/mm_sigmoid_prediction_{case_name}.png")
+    print(f"✓ {case_name:15s} (R² = {r2:.4f}){sparsity_info}")
+    print(f"  Samples: plots/mm_sigmoid_samples_{case_name}.png")
+    print(f"  Predict: plots/mm_sigmoid_prediction_{case_name}.png\n")
 
 
 def main() -> None:
