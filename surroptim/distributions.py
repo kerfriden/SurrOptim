@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Tuple, Union, List
 import numpy as np
 from scipy.stats import norm
+
+EPS_POSITIVE = 1e-12  # guard for log-uniform positivity checks
 try:
     from .config import SUPPORTED_DISTRIBUTIONS
 except ImportError:
@@ -62,6 +64,8 @@ class LogUniformDistribution(DistributionStrategy):
         if len(params) != 2:
             raise ValueError(f"Log-uniform distribution requires 2 parameters, got {len(params)}")
         a, b = params[0], params[1]
+        if not np.isfinite(a) or not np.isfinite(b):
+            raise ValueError(f"Log-uniform bounds must be finite, got a={a}, b={b}")
         if a <= 0 or b <= 0:
             raise ValueError(f"Log-uniform bounds must be positive, got a={a}, b={b}")
         if a >= b:
@@ -75,15 +79,20 @@ class LogUniformDistribution(DistributionStrategy):
         if len(params) != 2:
             raise ValueError(f"Log-uniform distribution requires 2 parameters, got {len(params)}")
         a, b = params[0], params[1]
+        if not np.isfinite(a) or not np.isfinite(b):
+            raise ValueError(f"Log-uniform bounds must be finite, got a={a}, b={b}")
         if a <= 0 or b <= 0:
             raise ValueError(f"Log-uniform bounds must be positive, got a={a}, b={b}")
         if a >= b:
             raise ValueError(f"Invalid log-uniform bounds: a={a} >= b={b}")
-        if np.any(X <= 0):
+
+        X_arr = np.asarray(X)
+        if np.any(X_arr <= 0):
             raise ValueError("Log-uniform requires positive samples")
 
         log_a, log_b = np.log(a), np.log(b)
-        return 2 * (np.log(X) - log_a) / (log_b - log_a) - 1
+        log_X = np.log(np.clip(X_arr, EPS_POSITIVE, None))
+        return 2 * (log_X - log_a) / (log_b - log_a) - 1
 
 
 class DistributionFactory:
