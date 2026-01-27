@@ -24,7 +24,7 @@ class sampler_cls:
     Attributes:
         types: List of distribution types for each parameter
         params: List of distribution parameters for each parameter
-        dimensions: Optional list of parameter names
+        active_keys: Optional list of parameter names
         compute_QoIs: Callable that computes QoI from parameters
         plot_solution: Optional callable for visualization
         n_out: Number of QoI outputs (auto-detected if None)
@@ -34,7 +34,7 @@ class sampler_cls:
         self,
         types: List[str],
         params: List[list],
-        dimensions: Optional[List[str]] = None,
+        active_keys: Optional[List[str]] = None,
         compute_QoIs: Optional[Callable] = None,
         plot_solution: Optional[Callable] = None,
         n_out: Optional[int] = None,
@@ -47,7 +47,7 @@ class sampler_cls:
         Args:
             types: List of distribution types ('uniform', 'log_uniform', 'normal', 'lognormal')
             params: List of [param1, param2] for each dimension
-            dimensions: Optional parameter names
+            active_keys: Optional parameter names
             compute_QoIs: Function(params_dict) -> QoI array
             plot_solution: Optional visualization function
             n_out: Number of QoI outputs (auto-detected if None)
@@ -69,7 +69,7 @@ class sampler_cls:
 
         self.types = types
         self.params = params
-        self.dimensions = dimensions
+        self.active_keys = active_keys
         self.compute_QoIs = compute_QoIs
         self.seed = int(seed) if seed is not None else None
         self.plot_solution = plot_solution
@@ -82,8 +82,8 @@ class sampler_cls:
         # Print initialization info
         print("Building your FEA sampler...")
         for i in range(len(self.params)):
-            if self.dimensions is not None:
-                print(f"parameter dimension {i}: {self.dimensions[i]}")
+            if self.active_keys is not None:
+                print(f"parameter dimension {i}: {self.active_keys[i]}")
             print(f"distribution type for dimension {i}: {self.types[i]}")
             print(f"params of distribution for dimension {i}: {self.params[i]}")
 
@@ -114,8 +114,8 @@ class sampler_cls:
 
         X = self._get_center_point()
 
-        if self.dimensions is not None:
-            params_dict = {self.dimensions[i]: X[0, i] for i in range(len(self.dimensions))}
+        if self.active_keys is not None:
+            params_dict = {self.active_keys[i]: X[0, i] for i in range(len(self.active_keys))}
             QoIs = self.compute_QoIs(params_dict)
         else:
             QoIs = self.compute_QoIs(X)
@@ -221,7 +221,7 @@ class sampler_cls:
         if self.compute_QoIs is None:
             return None
 
-        if self.dimensions is not None:
+        if self.active_keys is not None:
             raise NotImplementedError("Batch evaluation not yet implemented for dimension mapping")
 
         return self.compute_QoIs(X)
@@ -234,8 +234,8 @@ class sampler_cls:
         Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
 
         for i in range(len(X)):
-            if self.dimensions is not None:
-                params_dict = {self.dimensions[j]: X[i, j] for j in range(len(self.dimensions))}
+            if self.active_keys is not None:
+                params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
                 Y[i, :] = self.compute_QoIs(params_dict)
             else:
                 Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
@@ -306,10 +306,10 @@ class sampler_cls:
 
         xlabel = None
         ylabel = None
-        if self.dimensions is not None:
-            if len(self.dimensions) >= 1:
-                xlabel = self.dimensions[0]
-            if len(self.dimensions) >= 2:
-                ylabel = self.dimensions[1]
+        if self.active_keys is not None:
+            if len(self.active_keys) >= 1:
+                xlabel = self.active_keys[0]
+            if len(self.active_keys) >= 2:
+                ylabel = self.active_keys[1]
 
         prediction_plot(X=X_plot, y=self.Y, clabel=clabel, xlabel=xlabel, ylabel=ylabel, show=show)
