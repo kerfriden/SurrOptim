@@ -9,12 +9,8 @@ import numpy as np
 from typing import List, Callable, Optional, Dict, Tuple
 import matplotlib.pyplot as plt
 
-try:
-    from distributions import DistributionFactory
-    from doe_strategies import DOEFactory
-except ImportError:  # When imported as a package
-    from .distributions import DistributionFactory
-    from .doe_strategies import DOEFactory
+from .distributions import DistributionFactory
+from .doe_strategies import DOEFactory
 
 
 class sampler_cls:
@@ -326,7 +322,7 @@ class sampler_cls:
         Raises:
             ValueError: If problem dimensionality is not 1 or 2
         """
-        from util import prediction_plot
+        from .util import prediction_plot
 
         if len(self.bounds) not in [1, 2]:
             raise ValueError("Can only plot 1D or 2D problems")
