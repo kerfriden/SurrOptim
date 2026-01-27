@@ -65,8 +65,9 @@ def run_case(
         types=["uniform", "uniform"],
         params=[[-2, 2], [-2, 2]],
         compute_QoIs=sigmoid_qoi,
+        DOE_type="QRS",
     )
-    sampler.sampling(N=N_samples, DOE_type="QRS")
+    sampler.sampling(N=N_samples)
 
     # Select training space
     X_train = sampler.X_normalised if use_normalised else sampler.X

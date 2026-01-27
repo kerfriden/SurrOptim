@@ -192,7 +192,6 @@ class DOEFactory:
             raise ValueError(f"Dimension must be positive, got {dim}")
 
         return cls._strategies[doe_type](dim, seed=seed)
-        return cls._strategies[doe_type](dim)
 
     @classmethod
     def get_supported_types(cls) -> List[str]:

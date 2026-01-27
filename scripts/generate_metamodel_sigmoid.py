@@ -25,8 +25,9 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
         types=["uniform", "uniform"],
         params=[[-2, 2], [-2, 2]],
         compute_QoIs=sigmoid_qoi,
+        DOE_type=doe_type,
     )
-    sampler.sampling(N=N, DOE_type=doe_type)
+    sampler.sampling(N=N)
 
     # Train on normalized or physical space
     X_train = sampler.X_normalised if use_normalised else sampler.X

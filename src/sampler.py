@@ -39,6 +39,7 @@ class sampler_cls:
         plot_solution: Optional[Callable] = None,
         n_out: Optional[int] = None,
         seed: Optional[int] = None,
+        DOE_type: str = 'LHS',
     ):
         """
         Initialize sampler with distribution specifications.
@@ -51,6 +52,7 @@ class sampler_cls:
             plot_solution: Optional visualization function
             n_out: Number of QoI outputs (auto-detected if None)
             seed: Random seed for reproducible sampling (None for random behavior)
+            DOE_type: Design of Experiments type ('PRS', 'LHS', 'QRS', 'SG')
 
         Raises:
             ValueError: If types and params have mismatched lengths
@@ -69,9 +71,10 @@ class sampler_cls:
         self.params = params
         self.dimensions = dimensions
         self.compute_QoIs = compute_QoIs
-        self.seed = seed
+        self.seed = int(seed) if seed is not None else None
         self.plot_solution = plot_solution
         self.n_out = n_out
+        self.DOE_type = DOE_type
 
         # Create distribution strategy instances
         self.distributions = [DistributionFactory.create(t) for t in types]
@@ -94,7 +97,6 @@ class sampler_cls:
         # Storage for samples (X is computed on-demand from X_normalised)
         self.X_normalised: Optional[np.ndarray] = None
         self.Y: Optional[np.ndarray] = None
-        self.DOE_type: Optional[str] = None
         self.sampler_doe: Optional[object] = None
 
         print("... done building")
@@ -153,8 +155,7 @@ class sampler_cls:
 
         Args:
             N: Number of samples (or refinement level for SG)
-            DOE_type: Sampling strategy ('PRS', 'LHS', 'QRS', 'SG')
-            as_additional_points: If True, add to existing samples
+            as_additional_points: If True, add to existing samples; if False, replace (default: False)
             plot: If True, plot solutions during sampling
             sample_in_batch: If True, evaluate all samples at once (experimental)
 
@@ -163,17 +164,13 @@ class sampler_cls:
         """
         # Setup DOE strategy
         if self.sampler_doe is None or not as_additional_points:
-            self.DOE_type = DOE_type
+            if self.sampler_doe is not None and not as_additional_points:
+                print(f"Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
             try:
-                self.sampler_doe = DOEFactory.create(DOE_type, len(self.params), seed=self.seed)
+                self.sampler_doe = DOEFactory.create(self.DOE_type, len(self.params), seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
             X_normalised = self.sampler_doe.sample(N, as_additional_points=False)
-        elif self.DOE_type != DOE_type:
-            raise ValueError(
-                f"Cannot change DOE type mid-sampling. "
-                f"Current: {self.DOE_type}, requested: {DOE_type}"
-            )
         else:
             # Reuse existing DOE sampler and append points
             X_normalised = self.sampler_doe.sample(N, as_additional_points=True)
@@ -187,7 +184,8 @@ class sampler_cls:
         else:
             Y = None
 
-        print(f'Start computing {len(X_normalised)} samples in parametric dimension {len(self.params)}')
+        sample_type = "additional samples" if as_additional_points and self.X_normalised is not None else "samples"
+        print(f'Start computing {len(X_normalised)} {sample_type} in parametric dimension {len(self.params)} using {self.DOE_type}')
 
         # Evaluate samples
         if sample_in_batch and self.compute_QoIs is not None:
