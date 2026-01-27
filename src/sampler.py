@@ -38,6 +38,7 @@ class sampler_cls:
         compute_QoIs: Optional[Callable] = None,
         plot_solution: Optional[Callable] = None,
         n_out: Optional[int] = None,
+        seed: Optional[int] = None,
     ):
         """
         Initialize sampler with distribution specifications.
@@ -49,6 +50,7 @@ class sampler_cls:
             compute_QoIs: Function(params_dict) -> QoI array
             plot_solution: Optional visualization function
             n_out: Number of QoI outputs (auto-detected if None)
+            seed: Random seed for reproducible sampling (None for random behavior)
 
         Raises:
             ValueError: If types and params have mismatched lengths
@@ -67,6 +69,7 @@ class sampler_cls:
         self.params = params
         self.dimensions = dimensions
         self.compute_QoIs = compute_QoIs
+        self.seed = seed
         self.plot_solution = plot_solution
         self.n_out = n_out
 
@@ -162,7 +165,7 @@ class sampler_cls:
         if self.sampler_doe is None or not as_additional_points:
             self.DOE_type = DOE_type
             try:
-                self.sampler_doe = DOEFactory.create(DOE_type, len(self.params))
+                self.sampler_doe = DOEFactory.create(DOE_type, len(self.params), seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
             X_normalised = self.sampler_doe.sample(N, as_additional_points=False)

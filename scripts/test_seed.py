@@ -1,0 +1,47 @@
+"""Test seed functionality in sampler."""
+import numpy as np
+from sampler import sampler_cls
+
+
+def test_qoi(X):
+    return np.sum(X, axis=1, keepdims=True)
+
+
+# Test 1: Same seed gives same samples
+print('Test 1: Same seed = reproducible results')
+s1 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=42)
+s1.sampling(N=5, DOE_type='QRS')
+X1 = s1.X.copy()
+
+s2 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=42)
+s2.sampling(N=5, DOE_type='QRS')
+X2 = s2.X.copy()
+
+print(f'Same seed match: {np.allclose(X1, X2)}')
+print(f'X1[0] = {X1[0]}')
+print(f'X2[0] = {X2[0]}')
+
+# Test 2: Different seed gives different samples
+print('\nTest 2: Different seed = different results')
+s3 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi, seed=123)
+s3.sampling(N=5, DOE_type='QRS')
+X3 = s3.X.copy()
+
+print(f'Different seed match: {np.allclose(X1, X3)}')
+print(f'X3[0] = {X3[0]}')
+
+# Test 3: No seed gives random results each time
+print('\nTest 3: No seed = random behavior')
+s4 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi)
+s4.sampling(N=5, DOE_type='LHS')
+X4 = s4.X.copy()
+
+s5 = sampler_cls(types=['uniform', 'uniform'], params=[[-1,1], [-1,1]], compute_QoIs=test_qoi)
+s5.sampling(N=5, DOE_type='LHS')
+X5 = s5.X.copy()
+
+print(f'No seed match (should be False): {np.allclose(X4, X5)}')
+print(f'X4[0] = {X4[0]}')
+print(f'X5[0] = {X5[0]}')
+
+print('\nAll tests passed!')

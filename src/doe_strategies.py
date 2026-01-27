@@ -36,10 +36,12 @@ class DOEStrategy(ABC):
 class PRSStrategy(DOEStrategy):
     """Pseudo-Random Sampling (uniform random)."""
 
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, seed: Optional[int] = None):
         if dim <= 0:
             raise ValueError(f"Dimension must be positive, got {dim}")
         self.dim = dim
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
         self.X = None
 
     def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
@@ -47,7 +49,7 @@ class PRSStrategy(DOEStrategy):
         if N <= 0:
             raise ValueError(f"Number of samples must be positive, got {N}")
         
-        X = 2 * np.random.rand(N, self.dim) - 1
+        X = 2 * self.rng.random((N, self.dim)) - 1
 
         if as_additional_points and self.X is not None:
             self.X = np.concatenate((self.X, X), axis=0)
@@ -60,10 +62,11 @@ class PRSStrategy(DOEStrategy):
 class LHSStrategy(DOEStrategy):
     """Latin Hypercube Sampling."""
 
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, seed: Optional[int] = None):
         if dim <= 0:
             raise ValueError(f"Dimension must be positive, got {dim}")
         self.dim = dim
+        self.seed = seed
         self.X = None
 
     def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
@@ -72,7 +75,7 @@ class LHSStrategy(DOEStrategy):
             raise ValueError(f"Number of samples must be positive, got {N}")
         
         from scipy.stats import qmc
-        sampler = qmc.LatinHypercube(d=self.dim)
+        sampler = qmc.LatinHypercube(d=self.dim, seed=self.seed)
         X = 2 * sampler.random(n=N) - 1
 
         if as_additional_points and self.X is not None:
@@ -86,12 +89,15 @@ class LHSStrategy(DOEStrategy):
 class QRSStrategy(DOEStrategy):
     """Quasi-Random Sampling using Sobol sequence."""
 
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, seed: Optional[int] = None):
         if dim <= 0:
             raise ValueError(f"Dimension must be positive, got {dim}")
         self.dim = dim
+        self.seed = seed
         from scipy.stats import qmc
-        self.sampler = qmc.Sobol(d=self.dim, scramble=False)
+        # Sobol uses scramble parameter with seed for randomization
+        scramble = seed is not None
+        self.sampler = qmc.Sobol(d=self.dim, scramble=scramble, seed=seed)
         self.X_all = self.sampler.random_base2(m=QRS_SOBOL_M)
         self.X = None
         self.index = 0
@@ -120,10 +126,11 @@ class QRSStrategy(DOEStrategy):
 class SGStrategy(DOEStrategy):
     """Sparse Grid sampling using Clenshaw-Curtis quadrature."""
 
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, seed: Optional[int] = None):
         if dim <= 0:
             raise ValueError(f"Dimension must be positive, got {dim}")
         self.dim = dim
+        self.seed = seed  # Sparse grids are deterministic, seed not used
         self.X = None
 
     def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
@@ -161,13 +168,14 @@ class DOEFactory:
     }
 
     @classmethod
-    def create(cls, doe_type: str, dim: int) -> DOEStrategy:
+    def create(cls, doe_type: str, dim: int, seed: Optional[int] = None) -> DOEStrategy:
         """
         Create a DOE strategy instance.
 
         Args:
             doe_type: Type of DOE ('PRS', 'LHS', 'QRS', 'SG')
             dim: Problem dimensionality
+            seed: Random seed for reproducible sampling
 
         Returns:
             DOEStrategy instance
@@ -182,6 +190,8 @@ class DOEFactory:
             )
         if dim <= 0:
             raise ValueError(f"Dimension must be positive, got {dim}")
+
+        return cls._strategies[doe_type](dim, seed=seed)
         return cls._strategies[doe_type](dim)
 
     @classmethod
