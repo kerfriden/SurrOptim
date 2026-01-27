@@ -54,45 +54,63 @@ class UniformDistribution(DistributionStrategy):
 
 
 class LogUniformDistribution(DistributionStrategy):
-    """Log-uniform distribution using **physical** bounds (positive)."""
+    """Log-uniform distribution using specified transform formulas.
+    
+    Maps reference space u ∈ [-1, 1] to physical space mu ∈ [mu_min, mu_max]
+    using the transforms:
+        u_to_mu: mu = mu_min * (mu_max/mu_min)^((u+1)/2)
+        mu_to_u: u = 2*ln(mu/mu_min)/ln(mu_max/mu_min) - 1
+    """
 
     def denormalise(self, X_normalised: np.ndarray, params: List[float]) -> np.ndarray:
-        """Transform from [-1,1] to physical space with log scaling using physical bounds.
-
-        Params ``[a, b]`` are **physical** bounds (a>0, b>0). Mapping is applied in log space.
+        """Transform from [-1,1] to physical space: u -> mu
+        
+        Args:
+            X_normalised: Reference space values in [-1, 1]
+            params: [mu_min, mu_max] physical bounds (must be positive)
+            
+        Returns:
+            Physical space values
         """
         if len(params) != 2:
             raise ValueError(f"Log-uniform distribution requires 2 parameters, got {len(params)}")
-        a, b = params[0], params[1]
-        if not np.isfinite(a) or not np.isfinite(b):
-            raise ValueError(f"Log-uniform bounds must be finite, got a={a}, b={b}")
-        if a <= 0 or b <= 0:
-            raise ValueError(f"Log-uniform bounds must be positive, got a={a}, b={b}")
-        if a >= b:
-            raise ValueError(f"Invalid log-uniform bounds: a={a} >= b={b}")
+        mu_min, mu_max = params[0], params[1]
+        if not np.isfinite(mu_min) or not np.isfinite(mu_max):
+            raise ValueError(f"Log-uniform bounds must be finite, got mu_min={mu_min}, mu_max={mu_max}")
+        if mu_min <= 0 or mu_max <= 0:
+            raise ValueError(f"Log-uniform bounds must be positive, got mu_min={mu_min}, mu_max={mu_max}")
+        if mu_min >= mu_max:
+            raise ValueError(f"Invalid log-uniform bounds: mu_min={mu_min} >= mu_max={mu_max}")
 
-        log_a, log_b = np.log(a), np.log(b)
-        return np.exp((log_a + log_b) / 2 + (log_b - log_a) / 2 * X_normalised)
+        # u_to_mu: mu = mu_min * (mu_max/mu_min)^((u+1)/2)
+        return mu_min * (mu_max / mu_min) ** ((X_normalised + 1) / 2)
 
     def normalise(self, X: np.ndarray, params: List[float]) -> np.ndarray:
-        """Transform from physical space to [-1,1] using log scaling and physical bounds."""
+        """Transform from physical space to [-1,1]: mu -> u
+        
+        Args:
+            X: Physical space values
+            params: [mu_min, mu_max] physical bounds (must be positive)
+            
+        Returns:
+            Reference space values in [-1, 1]
+        """
         if len(params) != 2:
             raise ValueError(f"Log-uniform distribution requires 2 parameters, got {len(params)}")
-        a, b = params[0], params[1]
-        if not np.isfinite(a) or not np.isfinite(b):
-            raise ValueError(f"Log-uniform bounds must be finite, got a={a}, b={b}")
-        if a <= 0 or b <= 0:
-            raise ValueError(f"Log-uniform bounds must be positive, got a={a}, b={b}")
-        if a >= b:
-            raise ValueError(f"Invalid log-uniform bounds: a={a} >= b={b}")
+        mu_min, mu_max = params[0], params[1]
+        if not np.isfinite(mu_min) or not np.isfinite(mu_max):
+            raise ValueError(f"Log-uniform bounds must be finite, got mu_min={mu_min}, mu_max={mu_max}")
+        if mu_min <= 0 or mu_max <= 0:
+            raise ValueError(f"Log-uniform bounds must be positive, got mu_min={mu_min}, mu_max={mu_max}")
+        if mu_min >= mu_max:
+            raise ValueError(f"Invalid log-uniform bounds: mu_min={mu_min} >= mu_max={mu_max}")
 
         X_arr = np.asarray(X)
         if np.any(X_arr <= 0):
             raise ValueError("Log-uniform requires positive samples")
 
-        log_a, log_b = np.log(a), np.log(b)
-        log_X = np.log(np.clip(X_arr, EPS_POSITIVE, None))
-        return 2 * (log_X - log_a) / (log_b - log_a) - 1
+        # mu_to_u: u = 2*ln(mu/mu_min)/ln(mu_max/mu_min) - 1
+        return 2 * (np.log(X_arr) - np.log(mu_min)) / (np.log(mu_max) - np.log(mu_min)) - 1
 
 
 class DistributionFactory:

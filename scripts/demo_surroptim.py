@@ -11,8 +11,8 @@ from surroptim.polynomial_meta_models import polynomial_lasso_regressor
 # ============================================================================
 print("=== Test 1: Sparse Grid Sampling ===")
 sampler_sg = sampler_cls(
-    distributions=["uniform", "uniform"],
-    bounds=[[-2., 2.], [-2., 2.]],
+    distributions=["log_uniform", "uniform"],
+    bounds=[[np.exp(-2), np.exp(2.)], [-2., 2.]],
     DOE_type='SG',
     seed=0
 )
@@ -21,10 +21,31 @@ sampler_sg.sample(N=2)
 
 plt.figure(figsize=(6, 5))
 plt.scatter(sampler_sg.X[:, 0], sampler_sg.X[:, 1])
-plt.xlabel("x (uniform: [-2, 2])")
+plt.xlabel("x (log-uniform: [-2, 2])")
 plt.ylabel("y (uniform: [-2, 2])")
 plt.grid()
 plt.title("Sparse Grid Samples")
+plt.show()
+
+# ============================================================================
+# 1b. Sparse grid with log-uniform (requires positive bounds)
+# ============================================================================
+print("\n=== Test 1b: Sparse Grid with Log-Uniform ===")
+sampler_sg_log = sampler_cls(
+    distributions=["log_uniform", "uniform"],
+    bounds=[[np.exp(-2), np.exp(2.)], [-2., 2.]],
+    DOE_type='SG',
+    seed=0
+)
+
+sampler_sg_log.sample(N=2)
+
+plt.figure(figsize=(6, 5))
+plt.scatter(sampler_sg_log.X[:, 0], sampler_sg_log.X[:, 1])
+plt.xlabel("x (log-uniform: [-2, 2])")
+plt.ylabel("y (uniform: [-2, 2])")
+plt.grid()
+plt.title("Sparse Grid Samples (Log-Uniform)")
 plt.show()
 
 # ============================================================================
@@ -41,14 +62,14 @@ def sigmoid_qoi(active_param) -> np.ndarray:
         all_parameters[key] = value
     x = all_parameters["x"]
     y = all_parameters["y"]
-    s = x + y**2
+    s = np.log(x) + y**2
     sig = 1.0 / (1.0 + np.exp(-s))
     return np.vstack([s, sig]).T
 
 
 sampler = sampler_cls(
-    distributions=["uniform", "uniform"],
-    bounds=[[-2., 2.], [-2, 2]],
+    distributions=["log_uniform", "uniform"],
+    bounds=[[np.exp(-2), np.exp(2.)], [-2., 2.]],
     active_keys=['x', 'y'],
     compute_QoIs=sigmoid_qoi,
     DOE_type='QRS',
@@ -56,14 +77,14 @@ sampler = sampler_cls(
 )
 
 # First batch
-sampler.sample(N=5)
+sampler.sample(N=10)
 X_before = sampler.X.copy()
 Y_before = sampler.Y.copy()
 
 print(f"First batch: {len(X_before)} samples")
 
 # Incremental sampling
-sampler.sample(N=5, as_additional_points=True)
+sampler.sample(N=10, as_additional_points=True)
 print(f"After incremental: {len(sampler.X)} total samples")
 
 # Plot
@@ -79,8 +100,8 @@ cvals_new = sampler.Y[len(X_before):, 1]
 ax.scatter(sampler.X[len(X_before):, 0], sampler.X[len(X_before):, 1], 
           c=cvals_new, cmap="viridis", s=50, label='Batch 2 (incremental)')
 
-ax.set_xlabel("x (log-uniform)")
-ax.set_ylabel("y (uniform)")
+ax.set_xlabel("x (log-uniform: [-2, 2])")
+ax.set_ylabel("y (uniform: [-2, 2])")
 ax.set_title("Incremental Sampling: QRS")
 ax.grid(True, alpha=0.3)
 ax.legend()
@@ -100,8 +121,8 @@ print(f"Model trained on {len(sampler.X)} samples")
 
 # Test set
 sampler_test = sampler_cls(
-    distributions=["uniform", "uniform"],
-    bounds=[[-2., 2.], [-2, 2]],
+    distributions=["log_uniform", "uniform"],
+    bounds=[[np.exp(-2), np.exp(2.)], [-2., 2.]],
     seed=1
 )
 sampler_test.sample(N=30)
@@ -122,8 +143,8 @@ cvals_test = preds[:, 1]
 ax.scatter(sampler_test.X[:, 0], sampler_test.X[:, 1], marker="x", 
           c=cvals_test, cmap="viridis", s=100, label='Test (predicted)', linewidths=2)
 
-ax.set_xlabel("x (log-uniform)")
-ax.set_ylabel("y (uniform)")
+ax.set_xlabel("x (log-uniform: [-2, 2])")
+ax.set_ylabel("y (uniform: [-2, 2])")
 ax.set_title("Model Predictions on Test Set")
 ax.grid(True, alpha=0.3)
 ax.legend()
@@ -137,26 +158,32 @@ plt.show()
 print("\n=== Test 4: Contour Grid Prediction ===")
 
 # Physical space grid
-xmin, xmax = -2, 2
-ymin, ymax = -2, 2
+xmin, xmax = -1, 1
+ymin, ymax = -1, 1
 ng = 100
 
 xx = np.linspace(xmin, xmax, ng)
 yy = np.linspace(ymin, ymax, ng)
 Xg, Yg = np.meshgrid(xx, yy)
 
-grid_phys = np.c_[Xg.ravel(), Yg.ravel()]  # (ng*ng, 2) in physical space
+grid_ref = np.c_[Xg.ravel(), Yg.ravel()]  # (ng*ng, 2) in physical space
 
 # Convert to reference space
-grid_ref = sampler.physical2reference(grid_phys)
 
 # Predict on grid
 pred_grid = model.predict(grid_ref)  # shape (ng*ng, n_out)
 Z = pred_grid[:, 1].reshape(ng, ng)  # QoI[1]
 
+Xg, Yg = np.meshgrid(xx, yy)
+
+U = np.c_[Xg.ravel(), Yg.ravel()] 
+U_phys = sampler.reference2physical(U)  # Normalize grid for prediction
+Xg_phys = U_phys[:, 0].reshape(Xg.shape)          # (ny, nx)
+Yg_phys = U_phys[:, 1].reshape(Yg.shape)
+
 # Plot
 fig, ax = plt.subplots(figsize=(8, 6))
-cf = ax.contourf(Xg, Yg, Z, levels=30, cmap="viridis")
+cf = ax.contourf(Xg_phys, Yg_phys, Z, levels=30, cmap="viridis")
 cbar = plt.colorbar(cf, ax=ax, label="Predicted Sigmoid QoI")
 
 # Overlay training points
@@ -165,7 +192,7 @@ ax.scatter(sampler.X[:, 0], sampler.X[:, 1],
            edgecolors="black", linewidths=0.5, s=40, 
            label="Training points", zorder=5)
 
-ax.set_xlabel("x (uniform: [-2, 2])")
+ax.set_xlabel("x (log-uniform: [-2, 2])")
 ax.set_ylabel("y (uniform: [-2, 2])")
 ax.set_title("Polynomial Model Contour + Training Points")
 ax.legend()
