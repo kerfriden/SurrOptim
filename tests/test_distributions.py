@@ -57,7 +57,7 @@ class TestLogUniformDistribution:
     def test_denormalise(self):
         """Test denormalization from [-1,1] to physical space [a,b]."""
         dist = LogUniformDistribution()
-        params = [0.0, np.log(100.0)]  # log-space bounds: [1, 100]
+        params = [1.0, 100.0]  # physical bounds
         
         X_norm = np.array([-1.0, 0.0, 1.0])
         X_physical = dist.denormalise(X_norm, params)
@@ -69,7 +69,7 @@ class TestLogUniformDistribution:
     def test_normalise(self):
         """Test normalization from physical space to [-1,1]."""
         dist = LogUniformDistribution()
-        params = [0.0, np.log(100.0)]  # log-space bounds: [1, 100]
+        params = [1.0, 100.0]  # physical bounds
         
         X_physical = np.array([1.0, 10.0, 100.0])
         X_norm = dist.normalise(X_physical, params)
@@ -79,7 +79,7 @@ class TestLogUniformDistribution:
     def test_roundtrip(self):
         """Test roundtrip for log-uniform distribution."""
         dist = LogUniformDistribution()
-        params = [np.log(0.1), np.log(10.0)]  # log-space bounds
+        params = [0.1, 10.0]  # physical bounds
         
         X_physical_original = np.array([0.5, 1.0, 5.0])
         X_norm = dist.normalise(X_physical_original, params)

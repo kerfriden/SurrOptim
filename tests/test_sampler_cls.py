@@ -110,7 +110,7 @@ def test_sampler_uniform():
         n_out=2
     )
     
-    sampler.sampling(N=20)
+    sampler.sample(N=20)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     assert sampler.X.shape == (20, 2), "Sample shape mismatch"
@@ -129,7 +129,7 @@ def test_sampler_loguniform():
     """Test sampler with log-uniform distribution"""
     print("\n=== Test Sampler: Log-Uniform Distribution ===")
     distributions = ['log_uniform']
-    bounds = [[0, 2]]  # log space bounds: [e^0, e^2] = [1, 7.389...]
+    bounds = [[1.0, np.exp(2)]]  # physical bounds: [1, e^2]
     
     sampler = sampler_cls(
         distributions=distributions,
@@ -138,13 +138,13 @@ def test_sampler_loguniform():
         n_out=2
     )
     
-    sampler.sampling(N=20)
+    sampler.sample(N=20)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     print(f"Sample range: [{np.min(sampler.X):.6f}, {np.max(sampler.X):.6f}]")
     assert sampler.X.shape == (20, 1), "Sample shape mismatch"
     assert np.all(sampler.X > 0), "Log-uniform samples should be positive"
-    assert np.all(sampler.X >= np.exp(0)), "Samples below lower bound"
+    assert np.all(sampler.X >= 1.0), "Samples below lower bound"
     assert np.all(sampler.X <= np.exp(2)), "Samples above upper bound"
     
     # Plot the results
@@ -177,7 +177,7 @@ def test_sampler_sigmoid_qoi():
         n_out=2
     )
 
-    sampler.sampling(N=20)
+    sampler.sample(N=20)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     assert sampler.X.shape == (20, 2)
@@ -191,7 +191,7 @@ def test_sampler_normalisation():
     """Test normalization and denormalization"""
     print("\n=== Test Normalization/Denormalization ===")
     distributions = ['uniform', 'log_uniform']
-    bounds = [[0, 10], [0, 5]]
+    bounds = [[0, 10], [1.0, 150.0]]
     
     sampler = sampler_cls(
         distributions=distributions,
@@ -206,12 +206,12 @@ def test_sampler_normalisation():
     ])
     
     # Normalize
-    X_norm = sampler.normalise(X_phys)
+    X_norm = sampler.physical2reference(X_phys)
     print(f"Physical samples:\n{X_phys}")
     print(f"Normalized samples:\n{X_norm}")
     
     # Denormalize
-    X_phys_recovered = sampler.denormalise(X_norm)
+    X_phys_recovered = sampler.reference2physical(X_norm)
     print(f"Recovered physical samples:\n{X_phys_recovered}")
     
     # Check roundtrip accuracy
@@ -235,12 +235,12 @@ def test_sampler_incremental_sampling():
     )
     
     # First batch
-    sampler.sampling(N=5, as_additional_points=False)
+    sampler.sample(N=5, as_additional_points=False)
     print(f"After first sampling: {sampler.X.shape}")
     assert sampler.X.shape == (5, 1), "First batch shape mismatch"
     
     # Second batch as additional
-    sampler.sampling(N=5, as_additional_points=True)
+    sampler.sample(N=5, as_additional_points=True)
     print(f"After second sampling: {sampler.X.shape}")
     assert sampler.X.shape == (10, 1), "Incremental sampling failed"
     print("✓ Incremental sampling test passed")
@@ -274,7 +274,7 @@ def test_sampler_sg():
         n_out=2
     )
     
-    sampler.sampling(N=3)
+    sampler.sample(N=3)
     print(f"Samples shape: {sampler.X.shape}")
     print(f"QoI shape: {sampler.Y.shape}")
     assert sampler.X.shape[1] == 2, "Dimension mismatch"
@@ -379,7 +379,7 @@ def plot_all_tests():
         compute_QoIs=simple_qoi,
         n_out=2
     )
-    sampler_uniform.sampling(N=30)
+    sampler_uniform.sample(N=30)
     scatter = axes[1, 1].scatter(sampler_uniform.X[:, 0], sampler_uniform.X[:, 1], 
                                   c=sampler_uniform.Y[:, 0], cmap='viridis', s=80, alpha=0.7)
     axes[1, 1].set_title('Uniform Distribution (colored by Sum QoI)', fontweight='bold')

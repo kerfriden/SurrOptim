@@ -52,27 +52,38 @@ class UniformDistribution(DistributionStrategy):
 
 
 class LogUniformDistribution(DistributionStrategy):
-    """Log-uniform distribution: uniform on log scale."""
+    """Log-uniform distribution using **physical** bounds (positive)."""
 
     def denormalise(self, X_normalised: np.ndarray, params: List[float]) -> np.ndarray:
-        """Transform from [-1,1] to exp space: X_phys = exp((a+b)/2 + (b-a)/2 * X_norm)"""
+        """Transform from [-1,1] to physical space with log scaling using physical bounds.
+
+        Params ``[a, b]`` are **physical** bounds (a>0, b>0). Mapping is applied in log space.
+        """
         if len(params) != 2:
             raise ValueError(f"Log-uniform distribution requires 2 parameters, got {len(params)}")
         a, b = params[0], params[1]
+        if a <= 0 or b <= 0:
+            raise ValueError(f"Log-uniform bounds must be positive, got a={a}, b={b}")
         if a >= b:
             raise ValueError(f"Invalid log-uniform bounds: a={a} >= b={b}")
-        return np.exp((a + b) / 2 + (b - a) / 2 * X_normalised)
+
+        log_a, log_b = np.log(a), np.log(b)
+        return np.exp((log_a + log_b) / 2 + (log_b - log_a) / 2 * X_normalised)
 
     def normalise(self, X: np.ndarray, params: List[float]) -> np.ndarray:
-        """Transform from exp space to [-1,1]: X_norm = 2*(log(X_phys)-a)/(b-a) - 1"""
+        """Transform from physical space to [-1,1] using log scaling and physical bounds."""
         if len(params) != 2:
             raise ValueError(f"Log-uniform distribution requires 2 parameters, got {len(params)}")
         a, b = params[0], params[1]
+        if a <= 0 or b <= 0:
+            raise ValueError(f"Log-uniform bounds must be positive, got a={a}, b={b}")
         if a >= b:
             raise ValueError(f"Invalid log-uniform bounds: a={a} >= b={b}")
         if np.any(X <= 0):
             raise ValueError("Log-uniform requires positive samples")
-        return 2 * (np.log(X) - a) / (b - a) - 1
+
+        log_a, log_b = np.log(a), np.log(b)
+        return 2 * (np.log(X) - log_a) / (log_b - log_a) - 1
 
 
 class DistributionFactory:

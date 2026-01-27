@@ -106,7 +106,7 @@ class sampler_cls:
         """Denormalized physical-space samples (computed from X_reference on demand)."""
         if self.X_reference is None:
             return None
-        return self._denormalise_samples(self.X_reference)
+        return self._reference2physical_samples(self.X_reference)
 
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs by calling compute_QoIs at center point."""
@@ -134,7 +134,10 @@ class sampler_cls:
             if dist_type == 'uniform':
                 X[0, i] = (param[0] + param[1]) / 2
             elif dist_type == 'log_uniform':
-                X[0, i] = np.exp((param[0] + param[1]) / 2)
+                # Geometric mean when bounds are provided in physical space
+                if param[0] <= 0 or param[1] <= 0:
+                    raise ValueError("Log-uniform bounds must be positive for center point computation")
+                X[0, i] = np.exp((np.log(param[0]) + np.log(param[1])) / 2)
             elif dist_type == 'normal':
                 X[0, i] = param[0]  # Use mean
             elif dist_type == 'lognormal':
@@ -142,7 +145,7 @@ class sampler_cls:
 
         return X
 
-    def sampling(
+    def sample(
         self,
         N: int,
         as_additional_points: bool = False,
@@ -164,7 +167,9 @@ class sampler_cls:
         # Setup DOE strategy
         if self.sampler_doe is None or not as_additional_points:
             if self.sampler_doe is not None and not as_additional_points:
-                print(f"Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
+                print(
+                    "Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling."
+                )
             try:
                 self.sampler_doe = DOEFactory.create(self.DOE_type, len(self.bounds), seed=self.seed)
             except ValueError as e:
@@ -175,7 +180,7 @@ class sampler_cls:
             X_reference = self.sampler_doe.sample(N, as_additional_points=True)
 
         # Denormalize samples
-        X = self._denormalise_samples(X_reference)
+        X = self._reference2physical_samples(X_reference)
 
         # Compute QoIs
         if self.n_out is not None:
@@ -184,7 +189,9 @@ class sampler_cls:
             Y = None
 
         sample_type = "additional samples" if as_additional_points and self.X_reference is not None else "samples"
-        print(f'Start computing {len(X_reference)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}')
+        print(
+            f"Start computing {len(X_reference)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}"
+        )
 
         # Evaluate samples
         if sample_in_batch and self.compute_QoIs is not None:
@@ -197,23 +204,23 @@ class sampler_cls:
         # Store results
         self._store_results(X_reference, X, Y, as_additional_points)
 
-    def _denormalise_samples(self, X_normalised: np.ndarray) -> np.ndarray:
-        """Transform samples from [-1,1]^n to physical space."""
-        X = np.zeros_like(X_normalised)
+    def _reference2physical_samples(self, X_reference: np.ndarray) -> np.ndarray:
+        """Transform samples from reference space [-1,1]^n to physical space."""
+        X = np.zeros_like(X_reference)
 
         for j in range(len(self.bounds)):
-            X[:, j] = self.distribution_strategies[j].denormalise(X_normalised[:, j], self.bounds[j])
+            X[:, j] = self.distribution_strategies[j].denormalise(X_reference[:, j], self.bounds[j])
 
         return X
 
-    def _normalise_samples(self, X: np.ndarray) -> np.ndarray:
-        """Transform samples from physical space to [-1,1]^n."""
-        X_normalised = np.zeros_like(X)
+    def _physical2reference_samples(self, X: np.ndarray) -> np.ndarray:
+        """Transform samples from physical space to reference space [-1,1]^n."""
+        X_reference = np.zeros_like(X)
 
         for j in range(len(self.bounds)):
-            X_normalised[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
+            X_reference[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
 
-        return X_normalised
+        return X_reference
 
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         """Evaluate all samples at once."""
@@ -283,29 +290,29 @@ class sampler_cls:
             if Y is not None and self.Y is not None:
                 self.Y = np.concatenate((self.Y, Y), axis=0)
 
-    def normalise(self, X: np.ndarray) -> np.ndarray:
+    def physical2reference(self, X: np.ndarray) -> np.ndarray:
         """
-        Transform samples from physical space to [-1,1]^n.
+        Transform samples from physical space to reference space [-1,1]^n.
 
         Args:
             X: Samples in physical space, shape (n_samples, n_dims)
 
         Returns:
-            Normalized samples in [-1,1]^n
+            Reference samples in [-1,1]^n
         """
-        return self._normalise_samples(X)
+        return self._physical2reference_samples(X)
 
-    def denormalise(self, X_normalised: np.ndarray) -> np.ndarray:
+    def reference2physical(self, X_reference: np.ndarray) -> np.ndarray:
         """
-        Transform samples from [-1,1]^n to physical space.
+        Transform samples from reference space [-1,1]^n to physical space.
 
         Args:
-            X_normalised: Normalized samples in [-1,1]^n, shape (n_samples, n_dims)
+            X_reference: Reference samples in [-1,1]^n, shape (n_samples, n_dims)
 
         Returns:
             Samples in physical space
         """
-        return self._denormalise_samples(X_normalised)
+        return self._reference2physical_samples(X_reference)
 
     def plot_scatter(self, clabel: Optional[str] = None, normalised: bool = False, show: bool = True) -> None:
         """
