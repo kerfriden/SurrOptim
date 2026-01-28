@@ -3,4 +3,4 @@
 
 # SurrOptim
 
-Simple optimization utilities.
+Simple Surrogate Modelling and Optimization utilities.
