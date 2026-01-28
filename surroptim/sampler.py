@@ -33,6 +33,7 @@ class sampler_cls:
         bounds: List[list],
         active_keys: Optional[List[str]] = None,
         qoi_fn: Optional[Callable] = None,
+        compute_QoIs: Optional[Callable] = None,
         plot_solution: Optional[Callable] = None,
         n_out: Optional[int] = None,
         seed: Optional[int] = None,
@@ -68,7 +69,12 @@ class sampler_cls:
         self.distributions = distributions
         self.bounds = bounds
         self.active_keys = active_keys
+        # Backward-compatible alias: prefer `qoi_fn`, fall back to legacy `compute_QoIs`
+        if qoi_fn is None and compute_QoIs is not None:
+            qoi_fn = compute_QoIs
         self.qoi_fn = qoi_fn
+        # expose legacy name for external callers expecting it
+        self.compute_QoIs = self.qoi_fn
         self.seed = int(seed) if seed is not None else None
         self.plot_solution = plot_solution
         self.n_out = n_out
@@ -383,6 +389,7 @@ class sampler_new_cls:
         self,
         params,
         qoi_fn: Optional[Callable] = None,
+        compute_QoIs: Optional[Callable] = None,
         active_keys: Optional[List[str]] = None,
         seed: Optional[int] = None,
         doe_type: str = 'LHS',
@@ -392,7 +399,12 @@ class sampler_new_cls:
         # metadata like n_out. Accept qoi_fn and active_keys as explicit
         # constructor args that override any attributes on the params object.
         self.params = params
+        # Backward-compatible alias: prefer `qoi_fn`, fall back to legacy `compute_QoIs`
+        if qoi_fn is None and compute_QoIs is not None:
+            qoi_fn = compute_QoIs
         self.qoi_fn = qoi_fn
+        # expose legacy name for external callers expecting it
+        self.compute_QoIs = self.qoi_fn
         self.active_keys = active_keys if active_keys is not None else getattr(params, "active_keys", None)
         self.seed = int(seed) if seed is not None else None
         # plotting is not supported by sampler_new_cls; omit plot_solution
