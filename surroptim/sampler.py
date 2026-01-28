@@ -14,7 +14,7 @@ from .distributions import DistributionFactory
 from .doe_strategies import DOEFactory
 
 
-class sampler_cls:
+class sampler_legacy_cls:
     """
 
     Attributes:
@@ -337,23 +337,10 @@ class sampler_cls:
         return self.Y
 
 
-# Expose the old and new sampler names explicitly:
-# - preserve the original `sampler_cls` implementation under `sampler_legacy_cls`
-# - make the new implementation (`sampler_new_cls`) the public `sampler_cls`
-try:
-    sampler_legacy_cls = sampler_cls
-except NameError:
-    sampler_legacy_cls = None  # type: ignore
-
-try:
-    sampler_cls = sampler_new_cls
-except NameError:
-    # If the new sampler class isn't defined for some reason, leave the
-    # original `sampler_cls` in place.
-    pass
 
 
-class sampler_new_cls:
+
+class sampler_cls:
     """Sampler that uses an external `params` processor for unit<->physical transforms.
 
     The `params` argument must implement the same API as `params_cls` (e.g. `reference_to_physical`,
