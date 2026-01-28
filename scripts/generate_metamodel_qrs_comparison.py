@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from surroptim.sampler import sampler_cls
+from surroptim.sampler import sampler_old_cls as sampler_cls
 from gaussian_process_meta_model import GP_regressor
 
 try:

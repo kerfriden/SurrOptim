@@ -3,7 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from surroptim.sampler import sampler_cls
+from surroptim.sampler import sampler_old_cls as sampler_cls
 from surroptim.polynomial_meta_models import polynomial_lasso_regressor
 
 # ============================================================================
@@ -176,8 +176,8 @@ Z = pred_grid[:, 1].reshape(ng, ng)  # QoI[1]
 
 Xg, Yg = np.meshgrid(xx, yy)
 
-U = np.c_[Xg.ravel(), Yg.ravel()] 
-    U_phys = sampler.reference_to_physical(U)  # Normalize grid for prediction
+U = np.c_[Xg.ravel(), Yg.ravel()]
+U_phys = sampler.reference_to_physical(U)  # Normalize grid for prediction
 Xg_phys = U_phys[:, 0].reshape(Xg.shape)          # (ny, nx)
 Yg_phys = U_phys[:, 1].reshape(Yg.shape)
 

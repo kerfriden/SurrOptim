@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from surroptim.sampler import sampler_cls
+from surroptim.sampler import sampler_old_cls as sampler_cls
 from surroptim.util import prediction_plot
 
 

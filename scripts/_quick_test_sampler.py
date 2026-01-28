@@ -1,5 +1,5 @@
 import numpy as np
-from surroptim.sampler import sampler_cls
+from surroptim.sampler import sampler_old_cls as sampler_cls
 
 def qoi(X):
     X = np.atleast_2d(X)
