@@ -652,19 +652,46 @@ class sampler_new_cls:
             unpacked = self.params.unpack(X)
             # array-style unpack -> pass batched array to QoI
             if isinstance(unpacked, np.ndarray):
-                try:
-                    out = self.qoi_fn(unpacked)
-                except TypeError:
-                    # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
-                    warnings.warn(
-                        "Batch QoI evaluation failed; falling back to sequential evaluation",
-                        UserWarning,
-                    )
-                    outs = []
-                    for i in range(unpacked.shape[0]):
-                        oi = self.qoi_fn(unpacked[i])
-                        outs.append(np.asarray(oi).ravel())
-                    return np.vstack(outs)
+                # If params processor is array-mode with a stored base array,
+                # expand the packed representation back to the full base array
+                # so QoIs receive the same full-parameter shape as dict-mode.
+                if getattr(self.params, "_mode", None) == "array" and "__arr" in getattr(self.params, "base", {}):
+                    base_arr = np.asarray(self.params.base["__arr"]).copy()
+                    # build full array for all samples
+                    full = np.tile(base_arr[None, :], (unpacked.shape[0], 1))
+                    # fill active slots from unpacked packed columns
+                    for it in getattr(self.params, "_layout", []):
+                        if it.get("param") == "__arr":
+                            sl = it["sl"]
+                            mask = it["mask"]
+                            full[:, mask] = unpacked[:, sl]
+                    try:
+                        out = self.qoi_fn(full)
+                    except TypeError:
+                        # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
+                        warnings.warn(
+                            "Batch QoI evaluation failed; falling back to sequential evaluation",
+                            UserWarning,
+                        )
+                        outs = []
+                        for i in range(unpacked.shape[0]):
+                            oi = self.qoi_fn(full[i])
+                            outs.append(np.asarray(oi).ravel())
+                        return np.vstack(outs)
+                else:
+                    try:
+                        out = self.qoi_fn(unpacked)
+                    except TypeError:
+                        # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
+                        warnings.warn(
+                            "Batch QoI evaluation failed; falling back to sequential evaluation",
+                            UserWarning,
+                        )
+                        outs = []
+                        for i in range(unpacked.shape[0]):
+                            oi = self.qoi_fn(unpacked[i])
+                            outs.append(np.asarray(oi).ravel())
+                        return np.vstack(outs)
 
                 # If QoI returned a dict for batched input, flatten accordingly
                 if isinstance(out, dict):
@@ -714,7 +741,19 @@ class sampler_new_cls:
                     # If unpack returns an ndarray (array-style processor), pass
                     # the flat array to the QoI; otherwise assume dict and pass it.
                     if isinstance(unpacked, np.ndarray):
-                        to_call = unpacked if unpacked.ndim == 1 else unpacked.reshape(unpacked.shape)
+                        # For array-mode processors, expand packed vector to full base array
+                        if getattr(self.params, "_mode", None) == "array" and "__arr" in getattr(self.params, "base", {}):
+                            base_arr = np.asarray(self.params.base["__arr"]).copy()
+                            full = base_arr.copy()
+                            for it in getattr(self.params, "_layout", []):
+                                if it.get("param") == "__arr":
+                                    sl = it["sl"]
+                                    mask = it["mask"]
+                                    # unpacked is 1D for single sample
+                                    full[mask] = unpacked[sl]
+                            to_call = full
+                        else:
+                            to_call = unpacked if unpacked.ndim == 1 else unpacked.reshape(unpacked.shape)
                         out = self.qoi_fn(to_call)
                     else:
                         out = self.qoi_fn(unpacked)
