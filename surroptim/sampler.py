@@ -427,7 +427,7 @@ class sampler_new_cls:
         print(f"QoIs at test point: {QoIs}")
         self.n_out = np.max(np.asarray(QoIs).shape)
 
-    def sample(self, N: int, as_additional_points: bool = False, plot: bool = False, sample_in_batch: bool = False) -> None:
+    def sample(self, N: int, as_additional_points: bool = False, sample_in_batch: bool = False) -> None:
         if self.sampler_doe is None or not as_additional_points:
             if self.sampler_doe is not None and not as_additional_points:
                 print("Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
@@ -453,7 +453,7 @@ class sampler_new_cls:
         if sample_in_batch and self.compute_QoIs is not None:
             Y = self._evaluate_batch(X)
         else:
-            Y = self._evaluate_sequential(X, plot)
+            Y = self._evaluate_sequential(X)
 
         print("... done sampling")
 
@@ -477,7 +477,7 @@ class sampler_new_cls:
         except TypeError as e:
             raise TypeError(f"QoI evaluation failed: {e}") from e
 
-    def _evaluate_sequential(self, X: np.ndarray, plot: bool = False) -> Optional[np.ndarray]:
+    def _evaluate_sequential(self, X: np.ndarray) -> Optional[np.ndarray]:
         if self.compute_QoIs is None:
             return None
         Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
@@ -488,9 +488,8 @@ class sampler_new_cls:
                     Y[i, :] = self.compute_QoIs(params_dict)
                 else:
                     Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
-            except TypeError as e:
+            except TypeError:
                 raise
-            # plotting not supported in sampler_new_cls
         return Y
 
     def _store_results(self, X_reference: np.ndarray, X: np.ndarray, Y: Optional[np.ndarray], as_additional_points: bool) -> None:
