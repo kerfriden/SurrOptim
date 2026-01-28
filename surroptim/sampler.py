@@ -310,7 +310,7 @@ class sampler_cls:
         Y: Optional[np.ndarray],
         as_additional_points: bool,
     ) -> None:
-        """Store sampling results, optionally appending to existing data."""
+        add_to_dataset: bool = True,
         if self.X_reference is None or not as_additional_points:
             self.X_reference = X_reference
             self.Y = Y
@@ -328,11 +328,20 @@ class sampler_cls:
         Transform samples from physical space to reference space [-1,1]^n.
 
         Args:
-            X: Samples in physical space, shape (n_samples, n_dims)
-
-        Returns:
-            Reference samples in [-1,1]^n
-        """
+        # Resolve add-to-dataset flag with backward-compatible aliases.
+        # Precedence: explicit `as_additional_samples` if provided -> `add_to_dataset` -> `as_additional_points` kw
+        if as_additional_samples is not None:
+            as_additional = bool(as_additional_samples)
+        else:
+            # prefer new name unless legacy as_additional_points provided
+            if as_additional_points is not None:
+                as_additional = bool(as_additional_points)
+            else:
+                # allow legacy kw in kwargs to override
+                if "as_additional_points" in kwargs:
+                    as_additional = bool(kwargs.get("as_additional_points"))
+                else:
+                    as_additional = bool(add_to_dataset)
         return self._physical_to_reference_samples(X)
 
     def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
@@ -341,10 +350,10 @@ class sampler_cls:
 
         Args:
             X_reference: Reference samples in [-1,1]^n, shape (n_samples, n_dims)
-
+            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
         Returns:
             Samples in physical space
-        """
+            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
         return self._reference_to_physical_samples(X_reference)
 
     def plot_scatter(self, clabel: Optional[str] = None, normalised: bool = False, show: bool = True) -> None:
@@ -355,7 +364,7 @@ class sampler_cls:
             clabel: Label for colorbar
             normalised: If True, plot in normalized [-1,1]^n space; else physical space
             show: If True, display plot
-
+        sample_type = "additional samples" if as_additional and self.X_reference is not None else "samples"
         Raises:
             ValueError: If problem dimensionality is not 1 or 2
         """
@@ -369,7 +378,7 @@ class sampler_cls:
         xlabel = None
         ylabel = None
         if self.active_keys is not None:
-            if len(self.active_keys) >= 1:
+        self._store_results(X_reference, X, Y, as_additional_points if as_additional_points is not None else as_additional)
                 xlabel = self.active_keys[0]
             if len(self.active_keys) >= 2:
                 ylabel = self.active_keys[1]
@@ -593,7 +602,8 @@ class sampler_new_cls:
         self,
         n_samples: Optional[int] = None,
         N: Optional[int] = None,
-        as_additional_samples: bool = False,
+        add_to_dataset: bool = True,
+        as_additional_samples: Optional[bool] = None,
         as_additional_points: Optional[bool] = None,
         plot: bool = False,
         batch_computation: bool = False,
@@ -609,15 +619,23 @@ class sampler_new_cls:
             else:
                 n_samples = N
 
-        if as_additional_points is not None:
-            as_additional_samples = as_additional_points
+        # Resolve add-to-dataset flag with backward-compatible aliases.
+        # Precedence: explicit `as_additional_samples` if provided -> `add_to_dataset` -> `as_additional_points` kw
+        if as_additional_samples is not None:
+            as_additional = bool(as_additional_samples)
         else:
-            # also accept legacy name passed in kwargs
-            if not as_additional_samples and 'as_additional_points' in kwargs:
-                as_additional_samples = kwargs.get('as_additional_points')
+            # prefer new name unless legacy as_additional_points provided
+            if as_additional_points is not None:
+                as_additional = bool(as_additional_points)
+            else:
+                # allow legacy kw in kwargs to override
+                if 'as_additional_points' in kwargs:
+                    as_additional = bool(kwargs.get('as_additional_points'))
+                else:
+                    as_additional = bool(add_to_dataset)
 
-        if self.sampler_doe is None or not as_additional_samples:
-            if self.sampler_doe is not None and not as_additional_samples:
+        if self.sampler_doe is None or not as_additional:
+            if self.sampler_doe is not None and not as_additional:
                 print("Warning: Sampling is being reinitialized. Set as_additional_samples=True to continue sampling.")
             try:
                 self.sampler_doe = DOEFactory.create(self.doe_type, self.dim, seed=self.seed)
@@ -635,7 +653,7 @@ class sampler_new_cls:
         else:
             Y = None
 
-        sample_type = "additional samples" if as_additional_samples and self.X_reference is not None else "samples"
+        sample_type = "additional samples" if as_additional and self.X_reference is not None else "samples"
         print(f"Start computing {len(X_reference)} {sample_type} in parametric dimension {self.dim} using {self.DOE_type}")
 
         # Decide batch vs sequential based on params processor mode and caller preference
@@ -647,7 +665,7 @@ class sampler_new_cls:
 
         print("... done sampling")
 
-        self._store_results(X_reference, X, Y, as_additional_points)
+        self._store_results(X_reference, X, Y, as_additional_points if as_additional_points is not None else as_additional)
 
     def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
         """Use params.processor to convert reference to physical."""
