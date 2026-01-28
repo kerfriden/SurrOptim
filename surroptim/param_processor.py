@@ -477,8 +477,12 @@ class ParameterProcessor:
         return self.gauss_to_unit(g_or_G)
 
     # ---- direct physical <-> gaussian ----
-    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+    def physical_to_gaussian(self, x_or_X, *, clip=False, eps=None):
         return self.unit_to_gauss(self.physical_to_reference(x_or_X, clip=clip), eps=eps)
+
+    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        """Alias for `physical_to_gaussian` for callers expecting `physical_to_gauss`."""
+        return self.physical_to_gaussian(x_or_X, clip=clip, eps=eps)
 
     def gauss_to_physical(self, g_or_G, *, clip=False):
         return self.reference_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
