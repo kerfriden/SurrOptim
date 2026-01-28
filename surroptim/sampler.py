@@ -606,6 +606,41 @@ class sampler_new_cls:
         """Use params.processor to convert physical to reference."""
         return self.params.physical_to_reference(X)
 
+    # Delegate gaussian/reference conversion helpers to the params processor
+    def unit_to_gauss(self, z_or_Z, *, eps=None):
+        if hasattr(self.params, "unit_to_gauss"):
+            return self.params.unit_to_gauss(z_or_Z, eps=eps) if eps is not None else self.params.unit_to_gauss(z_or_Z)
+        raise AttributeError("params processor has no method 'unit_to_gauss'")
+
+    def gauss_to_unit(self, g_or_G):
+        if hasattr(self.params, "gauss_to_unit"):
+            return self.params.gauss_to_unit(g_or_G)
+        raise AttributeError("params processor has no method 'gauss_to_unit'")
+
+    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        if hasattr(self.params, "physical_to_gauss"):
+            return self.params.physical_to_gauss(x_or_X, clip=clip, eps=eps)
+        # fallback: compose operations if available
+        if hasattr(self.params, "physical_to_reference") and hasattr(self.params, "unit_to_gauss"):
+            Z = self.params.physical_to_reference(x_or_X, clip=clip)
+            return self.params.unit_to_gauss(Z, eps=eps)
+        raise AttributeError("params processor has no method 'physical_to_gauss' or equivalent composition")
+
+    def gauss_to_physical(self, g_or_G, *, clip=False):
+        if hasattr(self.params, "gauss_to_physical"):
+            return self.params.gauss_to_physical(g_or_G, clip=clip)
+        if hasattr(self.params, "gauss_to_unit") and hasattr(self.params, "reference_to_physical"):
+            Z = self.params.gauss_to_unit(g_or_G)
+            return self.params.reference_to_physical(Z, clip=clip)
+        raise AttributeError("params processor has no method 'gauss_to_physical' or equivalent composition")
+
+    # Backwards-compatible aliases
+    def gaussian_to_physical(self, g_or_G, *, clip=False):
+        return self.gauss_to_physical(g_or_G, clip=clip)
+
+    def gaussian_to_reference(self, g_or_G):
+        return self.gauss_to_unit(g_or_G)
+
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         if self.qoi_fn is None:
             return None
