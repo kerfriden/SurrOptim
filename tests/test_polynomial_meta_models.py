@@ -1,7 +1,7 @@
 import numpy as np
 
 from surroptim.polynomial_meta_models import polynomial_lasso_regressor, polynomial_ridge_regressor
-from surroptim.util import r2_score_simple
+from surroptim.util import r2_score
 
 
 def sigmoid_qoi(X: np.ndarray) -> np.ndarray:
@@ -28,7 +28,7 @@ def test_polynomial_ridge_sigmoid_qoi():
     model.train(X_train, y_train)
 
     y_pred = model.predict(X_test)
-    r2 = r2_score_simple(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     assert r2 > 0.9, f"R2 too low: {r2:.3f}"
 
 
@@ -46,5 +46,5 @@ def test_polynomial_lasso_fallback_fista():
     model.train(X_train, y_train)
 
     y_pred = model.predict(X_test)
-    r2 = r2_score_simple(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     assert r2 > 0.98, f"FISTA fallback R2 too low: {r2:.3f}"

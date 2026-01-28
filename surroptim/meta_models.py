@@ -41,7 +41,7 @@ class metamodel:
         self.y_test = y_test
 
         y_train_pred = self.predict(self.X)
-        print("R2 score train set :", r2_score_simple(self.y, y_train_pred))
+            print("R2 score train set :", r2_score(self.y, y_train_pred))
 
         y_test_pred = self.predict(self.X_test)
-        print("R2 score test set :", r2_score_simple(self.y_test, y_test_pred))
+            print("R2 score test set :", r2_score(self.y_test, y_test_pred))

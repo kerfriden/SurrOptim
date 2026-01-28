@@ -7,7 +7,7 @@ import pytest
 from surroptim.gaussian_process_meta_model import GP_regressor
 from surroptim.neural_network_meta_model import neural_net_regressor, neural_net_regressor_pt
 from surroptim.neighrest_neighbour_meta_model import NNeigh_regressor
-from surroptim.util import r2_score_simple
+from surroptim.util import r2_score
 
 
 def sigmoid_qoi(X: np.ndarray) -> np.ndarray:
@@ -37,7 +37,7 @@ def test_gp_regressor_sigmoid_qoi():
     model.train(X_train, y_train)
 
     y_pred = model.predict(X_test)
-    r2 = r2_score_simple(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     print(f"GP R2 on sigmoid: {r2:.3f}")
     assert r2 > 0.8, f"GP R2 too low: {r2:.3f}"
 
@@ -58,7 +58,7 @@ def test_neural_net_regressor_sigmoid_qoi():
     model.train(X_train, y_train, lr=1e-2, epochs=5000, restart=True)
 
     y_pred = model.predict(X_test)
-    r2 = r2_score_simple(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     print(f"Neural Net R2 on sigmoid: {r2:.3f}")
     assert r2 > 0.7, f"Neural Net R2 too low: {r2:.3f}"
 
@@ -85,7 +85,7 @@ def test_neural_net_regressor_pt_sigmoid_qoi():
     model.train(X_train, y_train, lr=1e-2, epochs=5000, restart=True)
 
     y_pred = model.predict(X_test).detach().numpy()
-    r2 = r2_score_simple(y_test_np, y_pred)
+    r2 = r2_score(y_test_np, y_pred)
     print(f"Neural Net (PT) R2 on sigmoid: {r2:.3f}")
     assert r2 > 0.7, f"Neural Net (PT) R2 too low: {r2:.3f}"
 
@@ -106,7 +106,7 @@ def test_knn_regressor_sigmoid_qoi():
     model.train(X_train, y_train)
 
     y_pred = model.predict(X_test)
-    r2 = r2_score_simple(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     print(f"k-NN R2 on sigmoid: {r2:.3f}")
     assert r2 > 0.5, f"k-NN R2 too low: {r2:.3f}"
 

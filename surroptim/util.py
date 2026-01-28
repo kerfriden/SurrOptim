@@ -4,13 +4,19 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def r2_score_simple(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Minimal R2 implementation: 1 - SSE/SST."""
+def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Minimal R2 implementation: 1 - SSE/SST.
+
+    Kept intentionally simple: returns 1 - sum((y-y_pred)^2)/sum((y-mean(y))^2).
+    """
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true, axis=0)) ** 2)
     return 1.0 - ss_res / ss_tot
+
+# Backwards compatibility alias
+r2_score_simple = r2_score
 
 
 def prediction_plot(X=None, y=None, function=None, x_plot=None, y_plot=None, show=True, marker_color=True, clabel=None, xlabel=None, ylabel=None, xlim=None, ylim=None):
