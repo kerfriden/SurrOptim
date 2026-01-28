@@ -175,6 +175,7 @@ class sampler_legacy_cls:
         self,
         n_samples: Optional[int] = None,
         N: Optional[int] = None,
+        level: Optional[int] = None,
         as_additional_samples: bool = False,
         as_additional_points: Optional[bool] = None,
         plot: bool = False,
@@ -211,6 +212,34 @@ class sampler_legacy_cls:
         if "as_additional_points" in kwargs and not as_additional_samples:
             as_additional_samples = kwargs.get("as_additional_points")
 
+        # If using sparse-grid DOE, prefer explicit `level` to avoid
+        # confusing `n_samples` semantics (n_samples -> number of samples
+        # for PRS/LHS/QRS, but represents refinement level for SG).
+        is_sg = (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
+            getattr(self, 'DOE_type', None) is not None and str(self.DOE_type).upper() == 'SG'
+        )
+
+        if is_sg:
+            # Resolve level: explicit `level` -> use it; else fall back to n_samples/N with deprecation warning
+            if level is None:
+                # If caller passed N but not level, accept but warn
+                if n_samples is not None and N is None:
+                    warnings.warn(
+                        "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                        DeprecationWarning,
+                    )
+                    level = int(n_samples)
+                    n_samples = None
+                elif N is not None and n_samples is None:
+                    warnings.warn(
+                        "Passing `N` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                        DeprecationWarning,
+                    )
+                    level = int(N)
+                else:
+                    # neither provided -> error
+                    raise ValueError("doe_type='SG' requires `level` to be specified")
+
         if self.sampler_doe is None or not as_additional_samples:
             if self.sampler_doe is not None and not as_additional_samples:
                 print(
@@ -220,10 +249,17 @@ class sampler_legacy_cls:
                 self.sampler_doe = DOEFactory.create(self.doe_type, len(self.bounds), seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
-            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
+            # For SG, pass `level` through as the first arg (legacy API expects n_samples==level)
+            if is_sg:
+                X_reference = self.sampler_doe.sample(level, as_additional_samples=False)
+            else:
+                X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
         else:
             # Reuse existing DOE sampler and append points
-            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
+            if is_sg:
+                X_reference = self.sampler_doe.sample(level, as_additional_samples=True)
+            else:
+                X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
 
         # Denormalize samples
         X = self._reference_to_physical_samples(X_reference)
@@ -583,6 +619,7 @@ class sampler_cls:
         self,
         n_samples: Optional[int] = None,
         N: Optional[int] = None,
+        level: Optional[int] = None,
         add_to_dataset: bool = True,
         as_additional_samples: Optional[bool] = None,
         as_additional_points: Optional[bool] = None,
@@ -615,6 +652,29 @@ class sampler_cls:
                 else:
                     as_additional = bool(add_to_dataset)
 
+        # Special handling for sparse-grid DOE: `level` is the refinement level
+        is_sg = (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
+            getattr(self, 'DOE_type', None) is not None and str(self.DOE_type).upper() == 'SG'
+        )
+
+        if is_sg:
+            if level is None:
+                if n_samples is not None and N is None:
+                    warnings.warn(
+                        "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                        DeprecationWarning,
+                    )
+                    level = int(n_samples)
+                    n_samples = None
+                elif N is not None and n_samples is None:
+                    warnings.warn(
+                        "Passing `N` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                        DeprecationWarning,
+                    )
+                    level = int(N)
+                else:
+                    raise ValueError("doe_type='SG' requires `level` to be specified")
+
         if self.sampler_doe is None or not as_additional:
             if self.sampler_doe is not None and not as_additional:
                 print("Warning: Sampling is being reinitialized. Set as_additional_samples=True to continue sampling.")
@@ -622,9 +682,15 @@ class sampler_cls:
                 self.sampler_doe = DOEFactory.create(self.doe_type, self.dim, seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
-            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
+            if is_sg:
+                X_reference = self.sampler_doe.sample(level, as_additional_samples=False)
+            else:
+                X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
         else:
-            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
+            if is_sg:
+                X_reference = self.sampler_doe.sample(level, as_additional_samples=True)
+            else:
+                X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
 
         # Convert reference -> physical using params processor
         X = self.reference_to_physical(X_reference)
