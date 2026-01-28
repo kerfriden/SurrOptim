@@ -25,6 +25,17 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray, multioutput: str = "uniform
         except Exception:
             pass
 
+    # If y_true is 2D with a single output column, collapse outputs to 1-D
+    # for convenience (matches sklearn behaviour comparing (N,1) and (N,)).
+    # Avoid using a naked squeeze which might collapse the sample axis on
+    # degenerate inputs like (1,1).
+    if y_true.ndim == 2 and y_true.shape[1] == 1:
+        y_true = y_true.ravel()
+        if y_pred.ndim == 2 and y_pred.shape[1] == 1:
+            y_pred = y_pred.ravel()
+        elif y_pred.ndim == 1 and y_pred.shape[0] == y_true.shape[0]:
+            y_pred = y_pred.ravel()
+
     if y_true.ndim == 1:
         ss_res = np.sum((y_true - y_pred) ** 2)
         ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)

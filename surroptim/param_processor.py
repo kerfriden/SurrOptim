@@ -394,6 +394,35 @@ class ParameterProcessor:
         """
         return self.physical_to_unit(x_or_X, clip=clip)
 
+    # Canonical short-name API: use 'phys' instead of 'physical'
+    def phys_to_unit(self, x_or_X, *, clip=False):
+        """Canonical short-name alias for `physical_to_unit`."""
+        return self.physical_to_unit(x_or_X, clip=clip)
+
+    # Backwards-compatible alias (kept for external callers)
+    def physical_to_unit(self, x_or_X, *, clip=False):
+        """Alias retained for backward compatibility (calls `phys_to_unit`)."""
+        X, is_batch = self._as_X(x_or_X)
+        # Original implementation preserved here for performance/readability
+        Z = np.zeros_like(X)
+
+        for it in self._layout:
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
+            Y = X[:, sl]
+            if clip:
+                Y = np.clip(Y, lo, hi)
+
+            if distribution == "linear":
+                t = (Y - lo) / (hi - lo)
+            else:  # log
+                if np.any(Y <= 0):
+                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
+                t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"]) 
+
+            Z[:, sl] = 2.0 * t - 1.0
+
+        return Z if is_batch else Z[0]
+
     def reference_to_physical(self, z_or_Z, *, clip=False):
         """Map reference/unit values in [-1, 1] back to physical parameter values.
 
@@ -426,6 +455,21 @@ class ParameterProcessor:
             X[:, sl] = Y
 
         return X if is_batch else X[0]
+
+    # Canonical short-name API: unit -> phys
+    def unit_to_phys(self, z_or_Z, *, clip=False):
+        """Canonical short-name alias for `unit_to_physical`."""
+        return self.unit_to_physical(z_or_Z, clip=clip)
+
+    # Reference -> phys shorthand
+    def reference_to_phys(self, z_or_Z, *, clip=False):
+        """Alias for `reference_to_physical` (canonical short name)."""
+        return self.reference_to_physical(z_or_Z, clip=clip)
+
+    # phys -> reference shorthand
+    def phys_to_reference(self, x_or_X, *, clip=False):
+        """Alias for `physical_to_reference` (canonical short name)."""
+        return self.physical_to_reference(x_or_X, clip=clip)
 
     # (removed compatibility aliases)
 
@@ -498,6 +542,19 @@ class ParameterProcessor:
     def gaussian_to_physical_dict(self, g_or_G, *, clip=False):
         """Convenience: convert gaussian values directly to an unpacked physical dict."""
         return self.gauss_to_dict(g_or_G, clip=clip)
+
+    # Canonical short-name APIs: use 'phys' instead of 'physical'
+    def gauss_to_phys(self, g_or_G, *, clip=False):
+        """Canonical alias for `gauss_to_physical`."""
+        return self.gauss_to_physical(g_or_G, clip=clip)
+
+    def gaussian_to_phys(self, g_or_G, *, clip=False):
+        """Canonical alias for `gaussian_to_physical`."""
+        return self.gaussian_to_physical(g_or_G, clip=clip)
+
+    def gaussian_to_phys_dict(self, g_or_G, *, clip=False):
+        """Canonical alias for `gaussian_to_physical_dict`."""
+        return self.gaussian_to_physical_dict(g_or_G, clip=clip)
 
     # (removed compatibility aliases)
 

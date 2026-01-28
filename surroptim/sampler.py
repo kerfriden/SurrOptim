@@ -724,6 +724,30 @@ class sampler_new_cls:
     def gaussian_to_reference(self, g_or_G):
         return self.gauss_to_unit(g_or_G)
 
+    # --- Compatibility short-name aliases for unit <-> physical conversions ---
+    def unit_to_physical(self, z_or_Z, *, clip=False):
+        """Delegate unit/reference -> physical to the params processor.
+
+        Prefer `params.unit_to_physical`, fall back to `params.reference_to_physical`.
+        """
+        if hasattr(self.params, "unit_to_physical"):
+            return self.params.unit_to_physical(z_or_Z, clip=clip)
+        if hasattr(self.params, "reference_to_physical"):
+            return self.params.reference_to_physical(z_or_Z, clip=clip)
+        raise AttributeError("params processor has no method 'unit_to_physical' or 'reference_to_physical'")
+
+    def unit_to_phys(self, z_or_Z, *, clip=False):
+        """Canonical short-name alias for `unit_to_physical`."""
+        return self.unit_to_physical(z_or_Z, clip=clip)
+
+    def reference_to_phys(self, z_or_Z, *, clip=False):
+        """Alias for `reference_to_physical` (short name)."""
+        return self.reference_to_physical(z_or_Z, clip=clip)
+
+    def phys_to_reference(self, x_or_X, *, clip=False):
+        """Alias for `physical_to_reference` (short name)."""
+        return self.physical_to_reference(x_or_X, clip=clip)
+
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         if self.qoi_fn is None:
             return None
