@@ -119,6 +119,21 @@ class sampler_cls:
     def x(self) -> Optional[np.ndarray]:
         return self.X
 
+    # Reference/unit-space sample accessors (new canonical names)
+    @property
+    def x_unit(self) -> Optional[np.ndarray]:
+        """Canonical accessor for unit/reference samples (alias to `X_reference`)."""
+        return self.X_reference
+
+    # Backwards-compatible aliases
+    @property
+    def x_reference(self) -> Optional[np.ndarray]:
+        return self.x_unit
+
+    @property
+    def X_unit(self) -> Optional[np.ndarray]:
+        return self.x_unit
+
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs by calling `qoi_fn` at center point."""
         print("n_out not provided -> calling FEA solver for automatic determination")
@@ -433,6 +448,19 @@ class sampler_new_cls:
     def x(self) -> Optional[np.ndarray]:
         return self.X
 
+    # Reference/unit-space sample accessors (canonical names)
+    @property
+    def x_unit(self) -> Optional[np.ndarray]:
+        return self.X_reference
+
+    @property
+    def x_reference(self) -> Optional[np.ndarray]:
+        return self.x_unit
+
+    @property
+    def X_unit(self) -> Optional[np.ndarray]:
+        return self.x_unit
+
     @property
     def X_gaussian(self) -> Optional[np.ndarray]:
         """Return samples in gaussian space corresponding to `X_reference`.
@@ -450,6 +478,20 @@ class sampler_new_cls:
         if hasattr(self.params, "reference_to_gauss"):
             return self.params.reference_to_gauss(self.X_reference)
         raise AttributeError("params processor has no method to convert reference -> gaussian (expected 'unit_to_gauss' or 'reference_to_gauss')")
+
+    # Canonical lowercase alias for gaussian samples
+    @property
+    def x_gauss(self) -> Optional[np.ndarray]:
+        return self.X_gaussian
+
+    # Backwards-compatible aliases
+    @property
+    def x_gaussian(self) -> Optional[np.ndarray]:
+        return self.X_gaussian
+
+    @property
+    def X_gauss(self) -> Optional[np.ndarray]:
+        return self.X_gaussian
 
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs using the params base point."""
