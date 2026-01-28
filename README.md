@@ -1,4 +1,4 @@
-https://colab.research.google.com/drive/10p9LCzXVGPEtwUFDA5GNBQUAGS_US3mt?usp=sharing
+(https://colab.research.google.com/github/kerfriden/SurrOptim/blob/main/demo_surroptim.ipynb)
 
 # SurrOptim
 
