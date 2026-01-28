@@ -148,15 +148,21 @@ class neural_net_regressor(metamodel):
 
         grads = np.zeros((N, n_out, n_in), dtype=float)
 
-        for i in range(N):
-            for j in range(n_out):
-                grad_full = torch.autograd.grad(
-                    y_torch[i, j], X_torch, retain_graph=True, allow_unused=True
-                )[0]
-                if grad_full is None:
-                    grads[i, j, :] = 0.0
-                else:
-                    grads[i, j, :] = grad_full[i].detach().numpy()
+        # More efficient gradient computation: for each output dimension j,
+        # compute gradient of the summed outputs y[:, j].sum() w.r.t. X_torch.
+        # This yields a tensor of shape (N, n_in) where row i contains
+        # d y_{i,j} / d x_{i,:} because samples are independent. This
+        # reduces autograd calls from O(N*n_out) to O(n_out).
+        for j in range(n_out):
+            retain = j < (n_out - 1)
+            grad_full = torch.autograd.grad(
+                y_torch[:, j].sum(), X_torch, retain_graph=retain, allow_unused=True
+            )[0]
+            if grad_full is None:
+                # Leave zeros for this output dimension
+                continue
+            # grad_full has shape (N, n_in)
+            grads[:, j, :] = grad_full.detach().cpu().numpy()
 
         return y_np, grads
 

@@ -6,7 +6,7 @@ Author: kerfriden
 License: MIT
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
-Requires-Dist: numpy>=1.20
+Requires-Dist: numpy<2.1,>=1.20
 Requires-Dist: scipy>=1.7
 Provides-Extra: ml
 Requires-Dist: scikit-learn>=1.0; extra == "ml"
@@ -22,6 +22,9 @@ Requires-Dist: torch>=2.0; extra == "all"
 Requires-Dist: matplotlib>=3.5; extra == "all"
 Requires-Dist: pytest>=7.0; extra == "all"
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kerfriden/SurrOptim/blob/main/demo_surroptim.ipynb)
+
+
 # SurrOptim
 
-Simple optimization utilities.
+Simple Surrogate Modelling and Optimization Library.
