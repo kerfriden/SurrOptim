@@ -1,6 +1,6 @@
 import numpy as np
 from surroptim.param_processor import params_cls
-from surroptim.sampler import sampler_new_cls
+from surroptim.sampler import sampler_cls
 
 # ============================================================================
 # 2. Incremental sampling with QoI evaluation using a single 3-element 'a'
@@ -32,7 +32,7 @@ def test_sampler_new_cls_incremental_sigmoid():
 
     P = params_cls(init_params=init_params, active_specs=active_specs)
 
-    sampler = sampler_new_cls(
+    sampler = sampler_cls(
         params=P,
         DOE_type="QRS",
         seed=0,

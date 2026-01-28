@@ -1,6 +1,6 @@
 import numpy as np
 from surroptim.param_processor import params_cls
-from surroptim.sampler import sampler_new_cls
+from surroptim.sampler import sampler_cls
 
 
 def test_array_init_pack_unpack_and_transforms():
@@ -44,7 +44,7 @@ def test_array_init_sampler_compatibility():
         s = float(arr[0]) + float(arr[1])
         return np.array([[s, 0.5]])
 
-    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=0, qoi_fn=qoi_arr)
+    sampler = sampler_cls(params=P, DOE_type="QRS", seed=0, qoi_fn=qoi_arr)
     sampler.sample(N=4, as_additional_points=False, batch_computation=True)
 
     assert sampler.X.shape == (4, 2)
@@ -81,7 +81,7 @@ def test_array_init_variant_select_and_vector_bounds():
     def qoi_arr(arr):
         return np.array([[float(arr[0] + arr[1] + arr[2])]])
 
-    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=1, qoi_fn=qoi_arr)
+    sampler = sampler_cls(params=P, DOE_type="QRS", seed=1, qoi_fn=qoi_arr)
     sampler.sample(N=5, as_additional_points=False, batch_computation=True)
 
     assert sampler.X.shape == (5, P.dim)
