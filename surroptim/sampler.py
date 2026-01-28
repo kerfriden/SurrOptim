@@ -394,6 +394,7 @@ class sampler_new_cls:
         seed: Optional[int] = None,
         doe_type: str = 'LHS',
         DOE_type: Optional[str] = None,
+        qoi_receive_packed: bool = False,
     ):
         # params is expected to encapsulate parameter layout and optionally
         # metadata like n_out. Accept qoi_fn and active_keys as explicit
@@ -407,6 +408,10 @@ class sampler_new_cls:
         self.compute_QoIs = self.qoi_fn
         self.active_keys = active_keys if active_keys is not None else getattr(params, "active_keys", None)
         self.seed = int(seed) if seed is not None else None
+        # If False (default), expand packed representations to the full base
+        # parameter array before calling `qoi_fn` so QoIs see the same full
+        # parameter shape as dict-mode processors. Set True to receive packed.
+        self.qoi_receive_packed = bool(qoi_receive_packed)
         # plotting is not supported by sampler_new_cls; omit plot_solution
         # n_out is not stored on params; detect from the provided `qoi_fn` when needed
         self.n_out = None
@@ -471,8 +476,24 @@ class sampler_new_cls:
         x_center = self.params.pack(self.params.base)
         # Prefer named dict input when the params processor provides an unpack method
         if self.active_keys is not None or hasattr(self.params, "unpack"):
-            params_dict = self.params.unpack(x_center)
-            qval = self.qoi_fn(params_dict)
+            unpacked = self.params.unpack(x_center)
+            # If params.processor is array-mode and we prefer full arrays,
+            # expand the packed representation to the full base array.
+            if isinstance(unpacked, np.ndarray) and not self.qoi_receive_packed:
+                # build full array
+                base_arr = np.asarray(self.params.base.get("__arr", [])).copy()
+                if base_arr.size:
+                    full = base_arr.copy()
+                    for it in getattr(self.params, "_layout", []):
+                        if it.get("param") == "__arr":
+                            sl = it["sl"]
+                            mask = it["mask"]
+                            full[mask] = unpacked[sl]
+                    qval = self.qoi_fn(full)
+                else:
+                    qval = self.qoi_fn(unpacked)
+            else:
+                qval = self.qoi_fn(unpacked)
         else:
             qval = self.qoi_fn(x_center)
         print(f"QoIs at test point: {qval}")
@@ -535,6 +556,36 @@ class sampler_new_cls:
         if not parts:
             return np.array([], dtype=int)
         return np.concatenate(parts)
+
+
+    def _expand_packed_to_full(self, packed):
+        """Expand packed representation(s) returned by params.unpack into the
+        full base parameter array(s). Accepts 1D (single) or 2D (batch) packed
+        arrays and returns the expanded full array(s).
+        """
+        base_arr = np.asarray(self.params.base.get("__arr", [])).copy()
+        if base_arr.size == 0:
+            # Nothing to expand to; return input as-is
+            return packed
+
+        a = np.asarray(packed)
+        if a.ndim == 1:
+            full = base_arr.copy()
+            for it in getattr(self.params, "_layout", []):
+                if it.get("param") == "__arr":
+                    sl = it["sl"]
+                    mask = it["mask"]
+                    full[mask] = a[sl]
+            return full
+
+        # a.ndim == 2
+        full = np.tile(base_arr[None, :], (a.shape[0], 1))
+        for it in getattr(self.params, "_layout", []):
+            if it.get("param") == "__arr":
+                sl = it["sl"]
+                mask = it["mask"]
+                full[:, mask] = a[:, sl]
+        return full
 
     
 
@@ -652,46 +703,28 @@ class sampler_new_cls:
             unpacked = self.params.unpack(X)
             # array-style unpack -> pass batched array to QoI
             if isinstance(unpacked, np.ndarray):
-                # If params processor is array-mode with a stored base array,
-                # expand the packed representation back to the full base array
-                # so QoIs receive the same full-parameter shape as dict-mode.
+                # Decide whether to pass packed or expanded full arrays
                 if getattr(self.params, "_mode", None) == "array" and "__arr" in getattr(self.params, "base", {}):
-                    base_arr = np.asarray(self.params.base["__arr"]).copy()
-                    # build full array for all samples
-                    full = np.tile(base_arr[None, :], (unpacked.shape[0], 1))
-                    # fill active slots from unpacked packed columns
-                    for it in getattr(self.params, "_layout", []):
-                        if it.get("param") == "__arr":
-                            sl = it["sl"]
-                            mask = it["mask"]
-                            full[:, mask] = unpacked[:, sl]
-                    try:
-                        out = self.qoi_fn(full)
-                    except TypeError:
-                        # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
-                        warnings.warn(
-                            "Batch QoI evaluation failed; falling back to sequential evaluation",
-                            UserWarning,
-                        )
-                        outs = []
-                        for i in range(unpacked.shape[0]):
-                            oi = self.qoi_fn(full[i])
-                            outs.append(np.asarray(oi).ravel())
-                        return np.vstack(outs)
+                    if self.qoi_receive_packed:
+                        to_pass = unpacked
+                    else:
+                        to_pass = self._expand_packed_to_full(unpacked)
                 else:
-                    try:
-                        out = self.qoi_fn(unpacked)
-                    except TypeError:
-                        # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
-                        warnings.warn(
-                            "Batch QoI evaluation failed; falling back to sequential evaluation",
-                            UserWarning,
-                        )
-                        outs = []
-                        for i in range(unpacked.shape[0]):
-                            oi = self.qoi_fn(unpacked[i])
-                            outs.append(np.asarray(oi).ravel())
-                        return np.vstack(outs)
+                    to_pass = unpacked
+
+                try:
+                    out = self.qoi_fn(to_pass)
+                except TypeError:
+                    # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
+                    warnings.warn(
+                        "Batch QoI evaluation failed; falling back to sequential evaluation",
+                        UserWarning,
+                    )
+                    outs = []
+                    for i in range(unpacked.shape[0]):
+                        oi = self.qoi_fn(to_pass[i])
+                        outs.append(np.asarray(oi).ravel())
+                    return np.vstack(outs)
 
                 # If QoI returned a dict for batched input, flatten accordingly
                 if isinstance(out, dict):
@@ -741,17 +774,14 @@ class sampler_new_cls:
                     # If unpack returns an ndarray (array-style processor), pass
                     # the flat array to the QoI; otherwise assume dict and pass it.
                     if isinstance(unpacked, np.ndarray):
-                        # For array-mode processors, expand packed vector to full base array
+                        # For array-mode processors, optionally expand packed vector
+                        # to the full base array before calling QoI depending on
+                        # the qoi_receive_packed flag.
                         if getattr(self.params, "_mode", None) == "array" and "__arr" in getattr(self.params, "base", {}):
-                            base_arr = np.asarray(self.params.base["__arr"]).copy()
-                            full = base_arr.copy()
-                            for it in getattr(self.params, "_layout", []):
-                                if it.get("param") == "__arr":
-                                    sl = it["sl"]
-                                    mask = it["mask"]
-                                    # unpacked is 1D for single sample
-                                    full[mask] = unpacked[sl]
-                            to_call = full
+                            if self.qoi_receive_packed:
+                                to_call = unpacked if unpacked.ndim == 1 else unpacked.reshape(unpacked.shape)
+                            else:
+                                to_call = self._expand_packed_to_full(unpacked)
                         else:
                             to_call = unpacked if unpacked.ndim == 1 else unpacked.reshape(unpacked.shape)
                         out = self.qoi_fn(to_call)
