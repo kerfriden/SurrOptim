@@ -119,20 +119,18 @@ class sampler_legacy_cls:
     def x(self) -> Optional[np.ndarray]:
         return self.X
 
-    # Reference/unit-space sample accessors (new canonical names)
-    @property
-    def x_unit(self) -> Optional[np.ndarray]:
-        """Canonical accessor for unit/reference samples (alias to `X_reference`)."""
-        return self.X_reference
-
-    # Backwards-compatible aliases
+    # Reference/unit-space accessors for legacy sampler
     @property
     def x_reference(self) -> Optional[np.ndarray]:
-        return self.x_unit
+        return self.X_reference
+
+    @property
+    def x_unit(self) -> Optional[np.ndarray]:
+        return self.X_reference
 
     @property
     def X_unit(self) -> Optional[np.ndarray]:
-        return self.x_unit
+        return self.X_reference
 
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs by calling `qoi_fn` at center point."""
@@ -301,6 +299,15 @@ class sampler_legacy_cls:
             Z[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
         return Z
 
+    # Backwards-compatible aliases matching the newer sampler API
+    def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
+        """Compatibility wrapper for older name `_physical_to_reference_samples`."""
+        return self._physical_to_reference_samples(X)
+
+    def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
+        """Compatibility wrapper for older name `_reference_to_physical_samples`."""
+        return self._reference_to_physical_samples(X_reference)
+
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         """Evaluate all samples at once."""
         if self.qoi_fn is None:
@@ -371,6 +378,15 @@ class sampler_legacy_cls:
     @property
     def y(self) -> Optional[np.ndarray]:
         return self.Y
+    
+
+# Backwards-compatible aliases will be finalized at EOF
+
+# Backwards-compatible aliases for historical class names
+# Older tests and code may import `sampler_new_cls` / `sampler_old_cls`.
+# These are set to the concrete classes at the end of the module
+# after both `sampler_legacy_cls` and `sampler_cls` are defined.
+
 
 
 
@@ -913,4 +929,36 @@ class sampler_cls:
     @property
     def y(self) -> Optional[np.ndarray]:
         return self.Y
+
+
+# Backwards-compatible aliases (finalized)
+sampler_new_cls = sampler_cls
+sampler_old_cls = sampler_legacy_cls
+
+
+def sampler_cls(*args, **kwargs):
+    """Compatibility factory for sampler classes.
+
+    Behavior:
+    - If caller passes a `params=` keyword (or first positional arg looks
+      like a params processor), construct and return the params-based
+      `sampler_new_cls` instance.
+    - Otherwise, construct and return the legacy `sampler_legacy_cls`.
+
+    This preserves older callsites that do `sampler = sampler_cls(distributions=..., bounds=...)`
+    while allowing new code to call `sampler_cls(params=P, ...)`.
+    """
+    # If explicit 'params' kw is provided, prefer new params-based sampler
+    if 'params' in kwargs:
+        return sampler_new_cls(*args, **kwargs)
+
+    # If first positional arg looks like a params processor, prefer new sampler
+    if len(args) >= 1:
+        first = args[0]
+        # Heuristic: params processors expose 'pack' and 'reference_to_physical' or 'dim'
+        if hasattr(first, 'pack') or hasattr(first, 'reference_to_physical') or hasattr(first, 'dim'):
+            return sampler_new_cls(*args, **kwargs)
+
+    # Fallback to legacy sampler for distributions/bounds style
+    return sampler_legacy_cls(*args, **kwargs)
     
