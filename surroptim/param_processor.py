@@ -181,6 +181,9 @@ class ParameterProcessor:
                 continue
             p = spec.get("param", var_id)
             spec["param"] = p
+            # Accept legacy key 'distribution' and normalize it to 'scale'
+            if "distribution" in spec and "scale" not in spec:
+                spec["scale"] = spec["distribution"]
             spec.setdefault("scale", "linear")
             spec.setdefault("select", None)
 

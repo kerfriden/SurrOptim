@@ -351,14 +351,17 @@ class sampler_new_cls:
     def __init__(
         self,
         params,
+        compute_QoIs: Optional[Callable] = None,
+        active_keys: Optional[List[str]] = None,
         seed: Optional[int] = None,
         DOE_type: str = 'LHS',
     ):
         # params is expected to encapsulate parameter layout and optionally
-        # metadata like compute_QoIs, active_keys, and n_out.
+        # metadata like n_out. Accept compute_QoIs and active_keys as explicit
+        # constructor args that override any attributes on the params object.
         self.params = params
-        self.compute_QoIs = getattr(params, "compute_QoIs", None)
-        self.active_keys = getattr(params, "active_keys", None)
+        self.compute_QoIs = compute_QoIs if compute_QoIs is not None else getattr(params, "compute_QoIs", None)
+        self.active_keys = active_keys if active_keys is not None else getattr(params, "active_keys", None)
         self.seed = int(seed) if seed is not None else None
         # plotting is not supported by sampler_new_cls; omit plot_solution
         # n_out is not stored on params; detect from compute_QoIs when needed
@@ -397,7 +400,8 @@ class sampler_new_cls:
         """Auto-detect number of QoI outputs using the params base point."""
         print("n_out not provided -> calling QoI for automatic determination")
         x_center = self.params.pack(self.params.base)
-        if self.active_keys is not None:
+        # Prefer named dict input when the params processor provides an unpack method
+        if self.active_keys is not None or hasattr(self.params, "unpack"):
             params_dict = self.params.unpack(x_center)
             QoIs = self.compute_QoIs(params_dict)
         else:
@@ -448,8 +452,8 @@ class sampler_new_cls:
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         if self.compute_QoIs is None:
             return None
-        if self.active_keys is not None:
-            raise NotImplementedError("Batch evaluation not implemented for active_keys mapping")
+        if self.active_keys is not None or hasattr(self.params, "unpack"):
+            raise NotImplementedError("Batch evaluation not implemented for active_keys/unpack mapping")
         try:
             return self.compute_QoIs(X)
         except TypeError as e:
@@ -461,7 +465,7 @@ class sampler_new_cls:
         Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
         for i in range(len(X)):
             try:
-                if self.active_keys is not None:
+                if self.active_keys is not None or hasattr(self.params, 'unpack'):
                     params_dict = self.params.unpack(X[i]) if hasattr(self.params, 'unpack') else {self.active_keys[j]: X[i,j] for j in range(len(self.active_keys))}
                     Y[i, :] = self.compute_QoIs(params_dict)
                 else:
