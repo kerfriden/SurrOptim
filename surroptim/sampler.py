@@ -396,6 +396,24 @@ class sampler_new_cls:
             return None
         return self.reference_to_physical(self.X_reference)
 
+    @property
+    def X_gaussian(self) -> Optional[np.ndarray]:
+        """Return samples in gaussian space corresponding to `X_reference`.
+
+        Delegates conversion to the injected `params` processor (expects
+        a `unit_to_gauss` or `reference_to_gauss`-style method). Returns
+        None if no reference samples are stored.
+        """
+        if self.X_reference is None:
+            return None
+        # prefer unit_to_gauss (compatibility name) on the params processor
+        if hasattr(self.params, "unit_to_gauss"):
+            return self.params.unit_to_gauss(self.X_reference)
+        # fallback if someone provided a reference->gauss named differently
+        if hasattr(self.params, "reference_to_gauss"):
+            return self.params.reference_to_gauss(self.X_reference)
+        raise AttributeError("params processor has no method to convert reference -> gaussian (expected 'unit_to_gauss' or 'reference_to_gauss')")
+
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs using the params base point."""
         print("n_out not provided -> calling QoI for automatic determination")
