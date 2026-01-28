@@ -432,6 +432,19 @@ class ParameterProcessor:
     def gauss_to_dict(self, g_or_G, *, clip=False):
         return self.unpack(self.gauss_to_physical(g_or_G, clip=clip))
 
+    # New convenience shortcuts: gaussian -> physical (array or dict)
+    def gaussian_to_physical(self, g_or_G, *, clip=False):
+        """Convenience: convert gaussian values directly to physical packed array.
+
+        Equivalent to `reference_to_physical(gauss_to_unit(g))` but provided
+        as a single, discoverable method for convenience.
+        """
+        return self.gauss_to_physical(g_or_G, clip=clip)
+
+    def gaussian_to_physical_dict(self, g_or_G, *, clip=False):
+        """Convenience: convert gaussian values directly to an unpacked physical dict."""
+        return self.gauss_to_dict(g_or_G, clip=clip)
+
     # Backward-compatible aliases for gaussian/reference naming
     gaussian_to_reference = gauss_to_unit
     reference_to_gaussian = unit_to_gauss
