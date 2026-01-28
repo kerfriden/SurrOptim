@@ -16,7 +16,6 @@ from .doe_strategies import DOEFactory
 
 class sampler_cls:
     """
-    Sampler for parametric studies with multiple distribution types and DOE strategies.
 
     Attributes:
         distributions: List of distribution types for each parameter
@@ -310,7 +309,6 @@ class sampler_cls:
         Y: Optional[np.ndarray],
         as_additional_points: bool,
     ) -> None:
-        add_to_dataset: bool = True,
         if self.X_reference is None or not as_additional_points:
             self.X_reference = X_reference
             self.Y = Y
@@ -324,47 +322,21 @@ class sampler_cls:
         return self.Y
 
     def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
-        """
-        Transform samples from physical space to reference space [-1,1]^n.
-
-        Args:
-        # Resolve add-to-dataset flag with backward-compatible aliases.
-        # Precedence: explicit `as_additional_samples` if provided -> `add_to_dataset` -> `as_additional_points` kw
-        if as_additional_samples is not None:
-            as_additional = bool(as_additional_samples)
-        else:
-            # prefer new name unless legacy as_additional_points provided
-            if as_additional_points is not None:
-                as_additional = bool(as_additional_points)
-            else:
-                # allow legacy kw in kwargs to override
-                if "as_additional_points" in kwargs:
-                    as_additional = bool(kwargs.get("as_additional_points"))
-                else:
-                    as_additional = bool(add_to_dataset)
+        """Transform samples from physical space to reference space [-1,1]^n."""
         return self._physical_to_reference_samples(X)
 
     def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
-        """
-        Transform samples from reference space [-1,1]^n to physical space.
-
-        Args:
-            X_reference: Reference samples in [-1,1]^n, shape (n_samples, n_dims)
-            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
-        Returns:
-            Samples in physical space
-            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
+        """Transform samples from reference space [-1,1]^n to physical space."""
         return self._reference_to_physical_samples(X_reference)
 
     def plot_scatter(self, clabel: Optional[str] = None, normalised: bool = False, show: bool = True) -> None:
-        """
-        Plot 1D or 2D sample distribution with optional QoI coloring.
+        """Plot 1D or 2D sample distribution with optional QoI coloring.
 
         Args:
             clabel: Label for colorbar
             normalised: If True, plot in normalized [-1,1]^n space; else physical space
             show: If True, display plot
-        sample_type = "additional samples" if as_additional and self.X_reference is not None else "samples"
+
         Raises:
             ValueError: If problem dimensionality is not 1 or 2
         """
@@ -378,7 +350,7 @@ class sampler_cls:
         xlabel = None
         ylabel = None
         if self.active_keys is not None:
-        self._store_results(X_reference, X, Y, as_additional_points if as_additional_points is not None else as_additional)
+            if len(self.active_keys) >= 1:
                 xlabel = self.active_keys[0]
             if len(self.active_keys) >= 2:
                 ylabel = self.active_keys[1]
