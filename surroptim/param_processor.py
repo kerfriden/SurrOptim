@@ -78,16 +78,16 @@ def norm_ppf(p):
 # Active specs helpers
 # ============================================================
 
-def _default_midpoint(lower, upper, scale):
+def _default_midpoint(lower, upper, distribution):
     lo = np.asarray(lower, dtype=float)
     hi = np.asarray(upper, dtype=float)
-    if scale == "linear":
+    if distribution == "linear":
         return 0.5 * (lo + hi)
-    if scale == "log":
+    if distribution == "log":
         if np.any(lo <= 0) or np.any(hi <= 0):
-            raise ValueError("log bounds require lower, upper > 0")
+            raise ValueError("log distribution requires lower, upper > 0")
         return np.sqrt(lo * hi)
-    raise ValueError(f"Unknown scale: {scale!r}")
+    raise ValueError(f"Unknown distribution: {distribution!r}")
 
 def _mask_from_select(select, shape):
     if shape == ():  # scalar
@@ -158,8 +158,8 @@ def _trim_selects_last_wins(active_specs, base_params, *, verbose=False, log=pri
 class ParameterProcessor:
     """
     - dict <-> packed physical vector(s)
-    - physical <-> unit z in [-1,1]^N (linear/log scales)
-    - unit <-> gaussian via u=(z+1)/2, g=Phi^{-1}(u) (and back)
+    - physical <-> reference z in [-1,1]^N (linear/log distributions)
+    - reference <-> gaussian via u=(z+1)/2, g=Phi^{-1}(u) (and back)
     - supports single (N,) and batch (M,N) arrays + list[dict]
     """
 
@@ -181,10 +181,10 @@ class ParameterProcessor:
                 continue
             p = spec.get("param", var_id)
             spec["param"] = p
-            # Accept legacy key 'distribution' and normalize it to 'scale'
-            if "distribution" in spec and "scale" not in spec:
-                spec["scale"] = spec["distribution"]
-            spec.setdefault("scale", "linear")
+            # Accept legacy key 'scale' and normalize it to 'distribution'
+            if "scale" in spec and "distribution" not in spec:
+                spec["distribution"] = spec["scale"]
+            spec.setdefault("distribution", "linear")
             spec.setdefault("select", None)
 
             if p not in self.base:
@@ -196,7 +196,7 @@ class ParameterProcessor:
                     self._scalar_keys.add(p)
                 else:
                     raise KeyError(f"Param '{p}' missing from init_params; cannot infer shape from select.")
-                fill = _default_midpoint(spec["lower"], spec["upper"], spec["scale"])
+                fill = _default_midpoint(spec["lower"], spec["upper"], spec["distribution"])
                 self.base[p] = np.broadcast_to(np.asarray(fill), shape).copy()
 
         # resolve overlaps once; normalize selects to boolean masks
@@ -212,7 +212,7 @@ class ParameterProcessor:
             p = spec["param"]
             arr = self.base[p]
             mask = spec["select"]
-            scale = spec.get("scale", "linear")
+            distribution = spec.get("distribution", "linear")
 
             n = 1 if arr.shape == () else int(mask.sum())
             sl = slice(cursor, cursor + n)
@@ -226,18 +226,18 @@ class ParameterProcessor:
             if np.any(hi <= lo):
                 raise ValueError(f"'{var_id}': require upper > lower elementwise.")
 
-            if scale == "log":
+            if distribution == "log":
                 if np.any(lo <= 0) or np.any(hi <= 0):
-                    raise ValueError(f"'{var_id}': log bounds require > 0.")
+                    raise ValueError(f"'{var_id}': log distribution requires > 0.")
                 loglo, loghi = np.log(lo), np.log(hi)
-            elif scale == "linear":
+            elif distribution == "linear":
                 loglo = loghi = None
             else:
-                raise ValueError(f"'{var_id}': unknown scale {scale!r}")
+                raise ValueError(f"'{var_id}': unknown distribution {distribution!r}")
 
             self._layout.append({
                 "var_id": var_id, "param": p, "mask": mask, "n": n, "sl": sl,
-                "scale": scale, "lo": lo, "hi": hi, "loglo": loglo, "loghi": loghi
+                "distribution": distribution, "lo": lo, "hi": hi, "loglo": loglo, "loghi": loghi
             })
 
         self.dim = cursor
@@ -306,20 +306,25 @@ class ParameterProcessor:
 
     # ---- physical <-> unit [-1,1]^N ----
     def physical_to_unit(self, x_or_X, *, clip=False):
+        """Alias name kept for compatibility: physical -> reference (-1,1).
+
+        Use `physical_to_reference` terminology where possible. If `clip=True`,
+        values are clipped to the declared bounds prior to mapping.
+        """
         X, is_batch = self._as_X(x_or_X)
         Z = np.zeros_like(X)
 
         for it in self._layout:
-            sl, lo, hi, scale = it["sl"], it["lo"], it["hi"], it["scale"]
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
             Y = X[:, sl]
             if clip:
                 Y = np.clip(Y, lo, hi)
 
-            if scale == "linear":
+            if distribution == "linear":
                 t = (Y - lo) / (hi - lo)
             else:  # log
                 if np.any(Y <= 0):
-                    raise ValueError(f"'{it['var_id']}': log scale requires values > 0")
+                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
                 t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"])
 
             Z[:, sl] = 2.0 * t - 1.0
@@ -327,20 +332,24 @@ class ParameterProcessor:
         return Z if is_batch else Z[0]
 
     def physical_to_reference(self, x_or_X, *, clip=False):
+        """Map physical parameters to reference space in [-1, 1].
+
+        If `clip=True` values are clipped to the active bounds before mapping.
+        """
         X, is_batch = self._as_X(x_or_X)
         Z = np.zeros_like(X)
 
         for it in self._layout:
-            sl, lo, hi, scale = it["sl"], it["lo"], it["hi"], it["scale"]
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
             Y = X[:, sl]
             if clip:
                 Y = np.clip(Y, lo, hi)
 
-            if scale == "linear":
+            if distribution == "linear":
                 t = (Y - lo) / (hi - lo)
             else:  # log
                 if np.any(Y <= 0):
-                    raise ValueError(f"'{it['var_id']}': log scale requires values > 0")
+                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
                 t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"])
 
             Z[:, sl] = 2.0 * t - 1.0
@@ -348,16 +357,21 @@ class ParameterProcessor:
         return Z if is_batch else Z[0]
 
     def reference_to_physical(self, z_or_Z, *, clip=False):
+        """Map reference values in [-1, 1] back to physical parameter values.
+
+        Raises ValueError if input is outside [-1,1] unless `clip=True` is used
+        on the upstream `physical_to_reference` call.
+        """
         Z, is_batch = self._as_X(z_or_Z)
         X = np.zeros_like(Z)
 
         for it in self._layout:
-            sl, lo, hi, scale = it["sl"], it["lo"], it["hi"], it["scale"]
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
             t = 0.5 * (Z[:, sl] + 1.0)
             if clip:
                 t = np.clip(t, 0.0, 1.0)
 
-            if scale == "linear":
+            if distribution == "linear":
                 Y = lo + t * (hi - lo)
             else:  # log
                 Y = np.exp(it["loglo"] + t * (it["loghi"] - it["loglo"]))
@@ -371,14 +385,23 @@ class ParameterProcessor:
     physical_to_unit = physical_to_reference
 
     def pack_unit(self, params_or_list, *, clip=False):
+        """Compatibility: pack physical dict to reference vector (-1,1)."""
         return self.physical_to_unit(self.pack(params_or_list), clip=clip)
 
     def unpack_unit(self, z_or_Z, *, clip=False):
+        """Compatibility: unpack reference vector (-1,1) to physical dict."""
         return self.unpack(self.reference_to_physical(z_or_Z, clip=clip))
 
     # ---- unit <-> gaussian ----
     def unit_to_gauss(self, z_or_Z, *, eps=None):
+        """Convert reference Z in [-1,1] to gaussian space via inverse CDF.
+
+        Raises ValueError if input reference values lie outside [-1,1].
+        """
         Z, is_batch = self._as_X(z_or_Z)
+        # Validate reference range
+        if np.any(Z < -1.0) or np.any(Z > 1.0):
+            raise ValueError("Reference values must be within [-1, 1].")
         eps = self.eps if eps is None else float(eps)
 
         U = 0.5 * (Z + 1.0)
@@ -388,6 +411,7 @@ class ParameterProcessor:
         return G if is_batch else G[0]
 
     def gauss_to_unit(self, g_or_G):
+        """Convert gaussian values to reference Z in [-1,1]."""
         G, is_batch = self._as_X(g_or_G)
         U = norm_cdf(G)
         Z = 2.0 * U - 1.0
@@ -400,12 +424,18 @@ class ParameterProcessor:
     def gauss_to_physical(self, g_or_G, *, clip=False):
         return self.reference_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
 
-    # ---- convenience: unit -> dict and gauss -> dict ----
+    # ---- convenience: reference -> dict and gauss -> dict ----
     def unit_to_dict(self, z_or_Z, *, clip=False):
+        """Compatibility wrapper: convert reference vector to physical dict."""
         return self.unpack_unit(z_or_Z, clip=clip)
 
     def gauss_to_dict(self, g_or_G, *, clip=False):
         return self.unpack(self.gauss_to_physical(g_or_G, clip=clip))
+
+    # Backward-compatible aliases for gaussian/reference naming
+    gaussian_to_reference = gauss_to_unit
+    reference_to_gaussian = unit_to_gauss
+    gaussian_to_physical = gauss_to_physical
 
 
 # ============================================================
@@ -446,7 +476,7 @@ class params_cls(ParameterProcessor):
             sl = it["sl"]
             lines.append(
                 f"  {it['var_id']:>10s}: param='{it['param']}', n={it['n']}, "
-                f"slice=[{sl.start}:{sl.stop}], scale={it['scale']}"
+                f"slice=[{sl.start}:{sl.stop}], distribution={it['distribution']}"
             )
         return "\n".join(lines)
 

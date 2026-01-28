@@ -427,7 +427,7 @@ class sampler_new_cls:
         print(f"QoIs at test point: {QoIs}")
         self.n_out = np.max(np.asarray(QoIs).shape)
 
-    def sample(self, N: int, as_additional_points: bool = False, sample_in_batch: bool = False) -> None:
+    def sample(self, N: int, as_additional_points: bool = False) -> None:
         if self.sampler_doe is None or not as_additional_points:
             if self.sampler_doe is not None and not as_additional_points:
                 print("Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
@@ -450,10 +450,7 @@ class sampler_new_cls:
         sample_type = "additional samples" if as_additional_points and self.X_reference is not None else "samples"
         print(f"Start computing {len(X_reference)} {sample_type} in parametric dimension {self.dim} using {self.DOE_type}")
 
-        if sample_in_batch and self.compute_QoIs is not None:
-            Y = self._evaluate_batch(X)
-        else:
-            Y = self._evaluate_sequential(X)
+        Y = self._evaluate_sequential(X)
 
         print("... done sampling")
 
