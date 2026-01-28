@@ -337,61 +337,20 @@ class sampler_cls:
         return self.Y
 
 
-# Backwards-compatible renames per API change request:
-# - the original `sampler_cls` is exposed as `sampler_legacy_cls`
-# - the implemented `sampler_new_cls` should become the public `sampler_cls`
-# Keep `sampler_new_cls` as an alias to the new `sampler_cls` for tests/code
-# that still import the older name.
+# Expose the old and new sampler names explicitly:
+# - preserve the original `sampler_cls` implementation under `sampler_legacy_cls`
+# - make the new implementation (`sampler_new_cls`) the public `sampler_cls`
 try:
-    # preserve original class object under legacy name
     sampler_legacy_cls = sampler_cls
 except NameError:
     sampler_legacy_cls = None  # type: ignore
 
 try:
-    # make sampler_cls refer to the implementation previously named sampler_new_cls
     sampler_cls = sampler_new_cls
-    # keep sampler_new_cls as alias to the public name
-    sampler_new_cls = sampler_cls
 except NameError:
-    # if sampler_new_cls isn't defined for some reason, do nothing
+    # If the new sampler class isn't defined for some reason, leave the
+    # original `sampler_cls` in place.
     pass
-
-    def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
-        """Transform samples from physical space to reference space [-1,1]^n."""
-        return self._physical_to_reference_samples(X)
-
-    def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
-        """Transform samples from reference space [-1,1]^n to physical space."""
-        return self._reference_to_physical_samples(X_reference)
-
-    def plot_scatter(self, clabel: Optional[str] = None, normalised: bool = False, show: bool = True) -> None:
-        """Plot 1D or 2D sample distribution with optional QoI coloring.
-
-        Args:
-            clabel: Label for colorbar
-            normalised: If True, plot in normalized [-1,1]^n space; else physical space
-            show: If True, display plot
-
-        Raises:
-            ValueError: If problem dimensionality is not 1 or 2
-        """
-        from .util import prediction_plot
-
-        if len(self.bounds) not in [1, 2]:
-            raise ValueError("Can only plot 1D or 2D problems")
-
-        X_plot = self.X_reference if normalised else self.X
-
-        xlabel = None
-        ylabel = None
-        if self.active_keys is not None:
-            if len(self.active_keys) >= 1:
-                xlabel = self.active_keys[0]
-            if len(self.active_keys) >= 2:
-                ylabel = self.active_keys[1]
-
-        prediction_plot(X=X_plot, y=self.Y, clabel=clabel, xlabel=xlabel, ylabel=ylabel, show=show)
 
 
 class sampler_new_cls:
