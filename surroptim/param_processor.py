@@ -471,6 +471,11 @@ class ParameterProcessor:
         Z = 2.0 * U - 1.0
         return Z if is_batch else Z[0]
 
+    # Backward-compatible alias: gaussian -> reference
+    def gaussian_to_reference(self, g_or_G):
+        """Alias for `gauss_to_unit` for callers expecting `gaussian_to_reference`."""
+        return self.gauss_to_unit(g_or_G)
+
     # ---- direct physical <-> gaussian ----
     def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
         return self.unit_to_gauss(self.physical_to_reference(x_or_X, clip=clip), eps=eps)
