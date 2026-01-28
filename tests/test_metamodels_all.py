@@ -5,8 +5,8 @@ Tests for all metamodel regressors: GP, neural network, and k-NN.
 import numpy as np
 import pytest
 from surroptim.gaussian_process_meta_model import GP_regressor
-from neural_network_meta_model import neural_net_regressor, neural_net_regressor_pt
-from neighrest_neighbour_meta_model import NNeigh_regressor
+from surroptim.neural_network_meta_model import neural_net_regressor, neural_net_regressor_pt
+from surroptim.neighrest_neighbour_meta_model import NNeigh_regressor
 from surroptim.util import r2_score_simple
 
 
