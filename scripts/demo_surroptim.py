@@ -177,7 +177,7 @@ Z = pred_grid[:, 1].reshape(ng, ng)  # QoI[1]
 Xg, Yg = np.meshgrid(xx, yy)
 
 U = np.c_[Xg.ravel(), Yg.ravel()] 
-U_phys = sampler.reference2physical(U)  # Normalize grid for prediction
+    U_phys = sampler.reference_to_physical(U)  # Normalize grid for prediction
 Xg_phys = U_phys[:, 0].reshape(Xg.shape)          # (ny, nx)
 Yg_phys = U_phys[:, 1].reshape(Yg.shape)
 

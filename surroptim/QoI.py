@@ -1,21 +1,33 @@
 import numpy as np
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Callable
 
 
 class QoI_cls:
     """
     Base Quantity-of-Interest helper.
 
-    Usage: subclass and implement `qoi(self, params_dict) -> dict`.
+    Two usage patterns are supported:
+      - Subclassing and implementing `qoi(self, params_dict) -> dict`.
+      - Passing a `qoi_func(params_dict) -> dict` callable at construction.
 
     Parameters
     ----------
     params : ParameterProcessor | Params
         Parameter handler that already implements pack/unpack/base.
+    qoi_func : callable, optional
+        If provided, this callable will be used as the QoI evaluator instead of
+        requiring a subclass to implement `qoi`.
     """
 
-    def __init__(self, params: Any):
+    def __init__(self, params: Any, qoi_func: Optional[Callable] = None):
         self.params = params
+
+        # If a callable is provided, use it as the qoi implementation.
+        if qoi_func is not None:
+            if not callable(qoi_func):
+                raise TypeError("qoi_func must be callable")
+            # bind the callable as an instance method
+            self.qoi = lambda params_dict: qoi_func(params_dict)
 
         # Build a reference layout from a sample QoI evaluation so we can flatten deterministically.
         ref_params = self.params.unpack(self.params.pack(self.params.base))

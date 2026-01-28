@@ -3,7 +3,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
-from surroptim.param_processor import Params_cls
+from surroptim.param_processor import params_cls
 
 
 def make_demo_params():
@@ -19,7 +19,7 @@ def make_demo_params():
         "A1": {"param": "A", "select": np.array([0,1,0], bool), "lower": 1e-3, "upper": 1e2, "scale": "log"},
     }
 
-    return Params_cls(init_params=init_params, active_specs=active_specs)
+    return params_cls(init_params=init_params, active_specs=active_specs)
 
 
 if __name__ == "__main__":

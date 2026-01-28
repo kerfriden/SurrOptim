@@ -323,7 +323,28 @@ class ParameterProcessor:
 
         return Z if is_batch else Z[0]
 
-    def unit_to_physical(self, z_or_Z, *, clip=False):
+    def physical_to_reference(self, x_or_X, *, clip=False):
+        X, is_batch = self._as_X(x_or_X)
+        Z = np.zeros_like(X)
+
+        for it in self._layout:
+            sl, lo, hi, scale = it["sl"], it["lo"], it["hi"], it["scale"]
+            Y = X[:, sl]
+            if clip:
+                Y = np.clip(Y, lo, hi)
+
+            if scale == "linear":
+                t = (Y - lo) / (hi - lo)
+            else:  # log
+                if np.any(Y <= 0):
+                    raise ValueError(f"'{it['var_id']}': log scale requires values > 0")
+                t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"])
+
+            Z[:, sl] = 2.0 * t - 1.0
+
+        return Z if is_batch else Z[0]
+
+    def reference_to_physical(self, z_or_Z, *, clip=False):
         Z, is_batch = self._as_X(z_or_Z)
         X = np.zeros_like(Z)
 
@@ -342,11 +363,15 @@ class ParameterProcessor:
 
         return X if is_batch else X[0]
 
+    # Backward-compatibility aliases (old names -> new names)
+    unit_to_physical = reference_to_physical
+    physical_to_unit = physical_to_reference
+
     def pack_unit(self, params_or_list, *, clip=False):
         return self.physical_to_unit(self.pack(params_or_list), clip=clip)
 
     def unpack_unit(self, z_or_Z, *, clip=False):
-        return self.unpack(self.unit_to_physical(z_or_Z, clip=clip))
+        return self.unpack(self.reference_to_physical(z_or_Z, clip=clip))
 
     # ---- unit <-> gaussian ----
     def unit_to_gauss(self, z_or_Z, *, eps=None):
@@ -367,10 +392,10 @@ class ParameterProcessor:
 
     # ---- direct physical <-> gaussian ----
     def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
-        return self.unit_to_gauss(self.physical_to_unit(x_or_X, clip=clip), eps=eps)
+        return self.unit_to_gauss(self.physical_to_reference(x_or_X, clip=clip), eps=eps)
 
     def gauss_to_physical(self, g_or_G, *, clip=False):
-        return self.unit_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
+        return self.reference_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
 
     # ---- convenience: unit -> dict and gauss -> dict ----
     def unit_to_dict(self, z_or_Z, *, clip=False):
@@ -384,13 +409,15 @@ class ParameterProcessor:
 # Option A: Params class (stores init_params + active_specs)
 # ============================================================
 
-class Params_cls(ParameterProcessor):
+class params_cls(ParameterProcessor):
     """
-    Base params helper; subclass this and define your own params0/active_specs in __init__,
-    then call super().__init__(params0, active_specs, ...).
+    Constructor-style params helper.
+
+    Preferred usage: instantiate with `params_cls(init_params=..., active_specs=...)`.
+    Backwards-compatible with previous `Params_cls` subclassing pattern.
     """
     def __init__(self, init_params: dict | None = None, active_specs: dict | None = None, *, verbose=False, log=print, eps=1e-12):
-        # Allow subclasses to set params0/active_specs_input (preferred) and omit args.
+        # Allow legacy subclasses to set params0/active_specs_input (handled by passing None)
         if init_params is None:
             init_params = getattr(self, "params0", None)
         if active_specs is None:
@@ -421,5 +448,6 @@ class Params_cls(ParameterProcessor):
         return "\n".join(lines)
 
 
-# Backward-compatible alias
-Params = Params_cls
+# Backward-compatible aliases
+Params = params_cls
+Params_cls = params_cls

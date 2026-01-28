@@ -206,12 +206,12 @@ def test_sampler_normalisation():
     ])
     
     # Normalize
-    X_norm = sampler.physical2reference(X_phys)
+    X_norm = sampler.physical_to_reference(X_phys)
     print(f"Physical samples:\n{X_phys}")
     print(f"Normalized samples:\n{X_norm}")
     
     # Denormalize
-    X_phys_recovered = sampler.reference2physical(X_norm)
+    X_phys_recovered = sampler.reference_to_physical(X_norm)
     print(f"Recovered physical samples:\n{X_phys_recovered}")
     
     # Check roundtrip accuracy

@@ -102,7 +102,7 @@ class sampler_cls:
         """Denormalized physical-space samples (computed from X_reference on demand)."""
         if self.X_reference is None:
             return None
-        return self._reference2physical_samples(self.X_reference)
+        return self._reference_to_physical_samples(self.X_reference)
 
     def _detect_n_out(self) -> None:
         """Auto-detect number of QoI outputs by calling compute_QoIs at center point."""
@@ -176,7 +176,7 @@ class sampler_cls:
             X_reference = self.sampler_doe.sample(N, as_additional_points=True)
 
         # Denormalize samples
-        X = self._reference2physical_samples(X_reference)
+        X = self._reference_to_physical_samples(X_reference)
 
         # Compute QoIs
         if self.n_out is not None:
@@ -200,7 +200,7 @@ class sampler_cls:
         # Store results
         self._store_results(X_reference, X, Y, as_additional_points)
 
-    def _reference2physical_samples(self, X_reference: np.ndarray) -> np.ndarray:
+    def _reference_to_physical_samples(self, X_reference: np.ndarray) -> np.ndarray:
         """Transform samples from reference space [-1,1]^n to physical space."""
         X = np.zeros_like(X_reference)
 
@@ -209,7 +209,7 @@ class sampler_cls:
 
         return X
 
-    def _physical2reference_samples(self, X: np.ndarray) -> np.ndarray:
+    def _physical_to_reference_samples(self, X: np.ndarray) -> np.ndarray:
         """Transform samples from physical space to reference space [-1,1]^n."""
         X_reference = np.zeros_like(X)
 
@@ -286,7 +286,7 @@ class sampler_cls:
             if Y is not None and self.Y is not None:
                 self.Y = np.concatenate((self.Y, Y), axis=0)
 
-    def physical2reference(self, X: np.ndarray) -> np.ndarray:
+    def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
         """
         Transform samples from physical space to reference space [-1,1]^n.
 
@@ -296,9 +296,9 @@ class sampler_cls:
         Returns:
             Reference samples in [-1,1]^n
         """
-        return self._physical2reference_samples(X)
+        return self._physical_to_reference_samples(X)
 
-    def reference2physical(self, X_reference: np.ndarray) -> np.ndarray:
+    def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
         """
         Transform samples from reference space [-1,1]^n to physical space.
 
@@ -308,7 +308,7 @@ class sampler_cls:
         Returns:
             Samples in physical space
         """
-        return self._reference2physical_samples(X_reference)
+        return self._reference_to_physical_samples(X_reference)
 
     def plot_scatter(self, clabel: Optional[str] = None, normalised: bool = False, show: bool = True) -> None:
         """
@@ -338,3 +338,145 @@ class sampler_cls:
                 ylabel = self.active_keys[1]
 
         prediction_plot(X=X_plot, y=self.Y, clabel=clabel, xlabel=xlabel, ylabel=ylabel, show=show)
+
+
+class sampler_new_cls:
+    """Sampler that uses an external `params` processor for unit<->physical transforms.
+
+    The `params` argument must implement the same API as `params_cls` (e.g. `reference_to_physical`,
+    `physical_to_reference`, `pack`, `unpack`, and `dim`). This sampler delegates normalization
+    logic to the provided `params` instance instead of keeping its own distribution strategies.
+    """
+
+    def __init__(
+        self,
+        params,
+        seed: Optional[int] = None,
+        DOE_type: str = 'LHS',
+    ):
+        # params is expected to encapsulate parameter layout and optionally
+        # metadata like compute_QoIs, active_keys, and n_out.
+        self.params = params
+        self.compute_QoIs = getattr(params, "compute_QoIs", None)
+        self.active_keys = getattr(params, "active_keys", None)
+        self.seed = int(seed) if seed is not None else None
+        # plotting is not supported by sampler_new_cls; omit plot_solution
+        # n_out is not stored on params; detect from compute_QoIs when needed
+        self.n_out = None
+        self.DOE_type = DOE_type
+
+        # Use the parameter processor's dimension
+        self.dim = int(self.params.dim)
+
+        # DOE sampler placeholder
+        self.sampler_doe: Optional[object] = None
+
+        print("Building sampler_new_cls using external params processor...")
+        print(f"param processor dim: {self.dim}")
+        if self.active_keys is not None:
+            for i, k in enumerate(self.active_keys):
+                print(f"parameter dimension {i}: {k}")
+
+        if self.compute_QoIs is not None:
+            self._detect_n_out()
+            print(f"n_out: {self.n_out}")
+
+        # Storage for samples
+        self.X_reference: Optional[np.ndarray] = None
+        self.Y: Optional[np.ndarray] = None
+
+        print("... done building sampler_new_cls")
+
+    @property
+    def X(self) -> Optional[np.ndarray]:
+        if self.X_reference is None:
+            return None
+        return self.reference_to_physical(self.X_reference)
+
+    def _detect_n_out(self) -> None:
+        """Auto-detect number of QoI outputs using the params base point."""
+        print("n_out not provided -> calling QoI for automatic determination")
+        x_center = self.params.pack(self.params.base)
+        if self.active_keys is not None:
+            params_dict = self.params.unpack(x_center)
+            QoIs = self.compute_QoIs(params_dict)
+        else:
+            QoIs = self.compute_QoIs(x_center)
+        print(f"QoIs at test point: {QoIs}")
+        self.n_out = np.max(np.asarray(QoIs).shape)
+
+    def sample(self, N: int, as_additional_points: bool = False, plot: bool = False, sample_in_batch: bool = False) -> None:
+        if self.sampler_doe is None or not as_additional_points:
+            if self.sampler_doe is not None and not as_additional_points:
+                print("Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
+            try:
+                self.sampler_doe = DOEFactory.create(self.DOE_type, self.dim, seed=self.seed)
+            except ValueError as e:
+                raise ValueError(f"Invalid DOE type: {e}")
+            X_reference = self.sampler_doe.sample(N, as_additional_points=False)
+        else:
+            X_reference = self.sampler_doe.sample(N, as_additional_points=True)
+
+        # Convert reference -> physical using params processor
+        X = self.reference_to_physical(X_reference)
+
+        if self.n_out is not None:
+            Y = np.zeros((len(X_reference), self.n_out))
+        else:
+            Y = None
+
+        sample_type = "additional samples" if as_additional_points and self.X_reference is not None else "samples"
+        print(f"Start computing {len(X_reference)} {sample_type} in parametric dimension {self.dim} using {self.DOE_type}")
+
+        if sample_in_batch and self.compute_QoIs is not None:
+            Y = self._evaluate_batch(X)
+        else:
+            Y = self._evaluate_sequential(X, plot)
+
+        print("... done sampling")
+
+        self._store_results(X_reference, X, Y, as_additional_points)
+
+    def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
+        """Use params.processor to convert reference to physical."""
+        return self.params.reference_to_physical(X_reference)
+
+    def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
+        """Use params.processor to convert physical to reference."""
+        return self.params.physical_to_reference(X)
+
+    def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
+        if self.compute_QoIs is None:
+            return None
+        if self.active_keys is not None:
+            raise NotImplementedError("Batch evaluation not implemented for active_keys mapping")
+        try:
+            return self.compute_QoIs(X)
+        except TypeError as e:
+            raise TypeError(f"QoI evaluation failed: {e}") from e
+
+    def _evaluate_sequential(self, X: np.ndarray, plot: bool = False) -> Optional[np.ndarray]:
+        if self.compute_QoIs is None:
+            return None
+        Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
+        for i in range(len(X)):
+            try:
+                if self.active_keys is not None:
+                    params_dict = self.params.unpack(X[i]) if hasattr(self.params, 'unpack') else {self.active_keys[j]: X[i,j] for j in range(len(self.active_keys))}
+                    Y[i, :] = self.compute_QoIs(params_dict)
+                else:
+                    Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
+            except TypeError as e:
+                raise
+            # plotting not supported in sampler_new_cls
+        return Y
+
+    def _store_results(self, X_reference: np.ndarray, X: np.ndarray, Y: Optional[np.ndarray], as_additional_points: bool) -> None:
+        if self.X_reference is None or not as_additional_points:
+            self.X_reference = X_reference
+            self.Y = Y
+        else:
+            self.X_reference = np.concatenate((self.X_reference, X_reference), axis=0)
+            if Y is not None and self.Y is not None:
+                self.Y = np.concatenate((self.Y, Y), axis=0)
+    
