@@ -73,15 +73,20 @@ class neural_net_regressor(metamodel):
             plot_func: Optional callback function for visualization during training
             restart: If True, reinitialize model; if False, continue training existing model
         """
+        # Ensure numpy arrays are double precision to enable zero-copy conversion
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
         super().train_init(X, y)
 
         # Reinitialize model if restart=True or model doesn't exist
         if (self.model is None) or restart:
             self.model = MLP(n_in=self.dim, n_hidden=self.n_hidden, n_out=self.n_out)
+            # enforce double precision for model parameters
+            self.model.double()
 
-        # Convert to torch tensors
-        X_torch = torch.from_numpy(X).float().requires_grad_(False)
-        y_torch = torch.from_numpy(y).float().requires_grad_(False)
+        # Convert to torch tensors (zero-copy when NumPy is float64)
+        X_torch = torch.from_numpy(X).requires_grad_(False)
+        y_torch = torch.from_numpy(y).requires_grad_(False)
 
         # Setup optimizer
         params = self.model.parameters()
@@ -111,8 +116,8 @@ class neural_net_regressor(metamodel):
         """
         if self.model is None:
             raise ValueError("Model not trained yet")
-        
-        X_torch = torch.from_numpy(X).float()
+        X = np.asarray(X, dtype=np.float64)
+        X_torch = torch.from_numpy(X)
         return self.model.forward(X_torch).detach().numpy()
 
     def predict_and_grad(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -128,7 +133,8 @@ class neural_net_regressor(metamodel):
         if self.model is None:
             raise ValueError("Model not trained yet")
 
-        X_torch = torch.from_numpy(X).float().requires_grad_(True)
+        X = np.asarray(X, dtype=np.float64)
+        X_torch = torch.from_numpy(X).requires_grad_(True)
         y_torch = self.model.forward(X_torch)
 
         # Ensure 2D outputs (N, n_out)
@@ -190,6 +196,11 @@ class neural_net_regressor_pt(metamodel):
             restart: If True, reinitialize model; if False, continue training existing model
         """
         # For compatibility with metamodel base class, store as numpy temporarily
+        # ensure incoming tensors are double precision
+        if isinstance(X, torch.Tensor):
+            X = X.double()
+        if isinstance(y, torch.Tensor):
+            y = y.double()
         X_np = X.detach().numpy() if isinstance(X, torch.Tensor) else X
         y_np = y.detach().numpy() if isinstance(y, torch.Tensor) else y
         super().train_init(X_np, y_np)
@@ -197,6 +208,8 @@ class neural_net_regressor_pt(metamodel):
         # Reinitialize model if restart=True or model doesn't exist
         if (self.model is None) or restart:
             self.model = MLP(n_in=self.dim, n_hidden=self.n_hidden, n_out=self.n_out)
+            # enforce double precision for model parameters
+            self.model.double()
 
         # Setup optimizer
         params = self.model.parameters()
@@ -227,4 +240,4 @@ class neural_net_regressor_pt(metamodel):
         if self.model is None:
             raise ValueError("Model not trained yet")
         
-        return self.model.forward(X)
+        return self.model.forward(X.double())
