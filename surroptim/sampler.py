@@ -159,6 +159,7 @@ class sampler_cls:
         as_additional_points: Optional[bool] = None,
         plot: bool = False,
         sample_in_batch: bool = False,
+        **kwargs,
     ) -> None:
         """
         Generate and evaluate N samples.
@@ -173,14 +174,22 @@ class sampler_cls:
             ValueError: If DOE_type is invalid
         """
         # Setup DOE strategy
-        # resolve backward-compatible args
+        # resolve backward-compatible args and accept legacy kwargs
         if n_samples is None:
+            # prefer explicit N if provided
             if N is None:
-                raise ValueError("n_samples (or legacy N) must be provided")
-            n_samples = N
+                # accept legacy kw in **kwargs
+                n_samples = kwargs.get("n_samples", None) or kwargs.get("N", None)
+                if n_samples is None:
+                    raise ValueError("n_samples (or legacy N) must be provided")
+            else:
+                n_samples = N
 
         if as_additional_points is not None:
             as_additional_samples = as_additional_points
+        # accept legacy name passed in kwargs
+        if "as_additional_points" in kwargs and not as_additional_samples:
+            as_additional_samples = kwargs.get("as_additional_points")
 
         if self.sampler_doe is None or not as_additional_samples:
             if self.sampler_doe is not None and not as_additional_samples:
@@ -529,11 +538,31 @@ class sampler_new_cls:
         # resolve backward-compatible args
         if n_samples is None:
             if N is None:
-                raise ValueError("n_samples (or legacy N) must be provided")
-            n_samples = N
+                # accept legacy names passed via kwargs in some call-sites
+                # (e.g., callers using an older installed package signature)
+                # attempt to retrieve them from the function call frame's kwargs
+                # NOTE: this is a defensive fallback; prefer passing explicit args.
+                import inspect
+
+                frame = inspect.currentframe().f_back
+                call_kwargs = frame.f_locals.get('kwargs', {}) if frame is not None else {}
+                n_samples = call_kwargs.get('n_samples') or call_kwargs.get('N')
+                if n_samples is None:
+                    raise ValueError("n_samples (or legacy N) must be provided")
+            else:
+                n_samples = N
 
         if as_additional_points is not None:
             as_additional_samples = as_additional_points
+        else:
+            # also check older call-sites that may have passed the legacy
+            # name via `as_additional_points` in their kwargs mapping
+            import inspect
+
+            frame = inspect.currentframe().f_back
+            call_kwargs = frame.f_locals.get('kwargs', {}) if frame is not None else {}
+            if not as_additional_samples and 'as_additional_points' in call_kwargs:
+                as_additional_samples = call_kwargs.get('as_additional_points')
 
         if self.sampler_doe is None or not as_additional_samples:
             if self.sampler_doe is not None and not as_additional_samples:
