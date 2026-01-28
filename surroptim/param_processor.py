@@ -392,25 +392,7 @@ class ParameterProcessor:
 
         If `clip=True` values are clipped to the active bounds before mapping.
         """
-        X, is_batch = self._as_X(x_or_X)
-        Z = np.zeros_like(X)
-
-        for it in self._layout:
-            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
-            Y = X[:, sl]
-            if clip:
-                Y = np.clip(Y, lo, hi)
-
-            if distribution == "linear":
-                t = (Y - lo) / (hi - lo)
-            else:  # log
-                if np.any(Y <= 0):
-                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
-                t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"])
-
-            Z[:, sl] = 2.0 * t - 1.0
-
-        return Z if is_batch else Z[0]
+        return self.physical_to_unit(x_or_X, clip=clip)
 
     def reference_to_physical(self, z_or_Z, *, clip=False):
         """Map reference values in [-1, 1] back to physical parameter values.
