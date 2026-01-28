@@ -336,6 +336,27 @@ class sampler_cls:
     def y(self) -> Optional[np.ndarray]:
         return self.Y
 
+
+# Backwards-compatible renames per API change request:
+# - the original `sampler_cls` is exposed as `sampler_legacy_cls`
+# - the implemented `sampler_new_cls` should become the public `sampler_cls`
+# Keep `sampler_new_cls` as an alias to the new `sampler_cls` for tests/code
+# that still import the older name.
+try:
+    # preserve original class object under legacy name
+    sampler_legacy_cls = sampler_cls
+except NameError:
+    sampler_legacy_cls = None  # type: ignore
+
+try:
+    # make sampler_cls refer to the implementation previously named sampler_new_cls
+    sampler_cls = sampler_new_cls
+    # keep sampler_new_cls as alias to the public name
+    sampler_new_cls = sampler_cls
+except NameError:
+    # if sampler_new_cls isn't defined for some reason, do nothing
+    pass
+
     def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
         """Transform samples from physical space to reference space [-1,1]^n."""
         return self._physical_to_reference_samples(X)
