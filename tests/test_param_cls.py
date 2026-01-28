@@ -5,25 +5,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
 from surroptim.param_processor import Params_cls
 
-class DemoParams(Params_cls):
-    def __init__(self):
-        params0 = {
-            "E": 210.0,
-            "nu": 0.30,                          # frozen by omission
-            "A": np.array([0.2, 5.0, 7.0]),
-        }
 
-        active_specs = {
-            "E":  {"lower": 100.0, "upper": 300.0, "scale": "linear", "select": None},
-            "A0": {"param": "A", "select": np.array([1,0,0], bool), "lower": 0.0,  "upper": 1.0, "scale": "linear"},
-            "A1": {"param": "A", "select": np.array([0,1,0], bool), "lower": 1e-3, "upper": 1e2, "scale": "log"},
-        }
+def make_demo_params():
+    init_params = {
+        "E": 210.0,
+        "nu": 0.30,
+        "A": np.array([0.2, 5.0, 7.0]),
+    }
 
-        super().__init__(params0, active_specs)
+    active_specs = {
+        "E":  {"lower": 100.0, "upper": 300.0, "scale": "linear", "select": None},
+        "A0": {"param": "A", "select": np.array([1,0,0], bool), "lower": 0.0,  "upper": 1.0, "scale": "linear"},
+        "A1": {"param": "A", "select": np.array([0,1,0], bool), "lower": 1e-3, "upper": 1e2, "scale": "log"},
+    }
+
+    return Params_cls(init_params=init_params, active_specs=active_specs)
 
 
 if __name__ == "__main__":
-    P = DemoParams()
+    P = make_demo_params()
     params0 = P.init_params
 
     print("=== LAYOUT ===")
