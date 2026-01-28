@@ -22,7 +22,7 @@ class DOE_cls:
     use DOEFactory directly or through sampler_cls.
     """
 
-    def __init__(self, dim: int, DOE_type: str = "PRS"):
+    def __init__(self, dim: int, doe_type: str = "PRS", DOE_type: Optional[str] = None):
         """
         Initialize DOE sampler.
 
@@ -30,13 +30,15 @@ class DOE_cls:
             dim: Problem dimensionality
             DOE_type: Sampling strategy ('PRS', 'LHS', 'QRS', 'SG')
         """
-        print(f"Instantiating {DOE_type} sampler")
+        # accept legacy DOE_type kwarg
+        actual = DOE_type if DOE_type is not None else doe_type
+        print(f"Instantiating {actual} sampler")
         self.dim = dim
-        self.DOE_type = DOE_type
-        self.strategy = DOEFactory.create(DOE_type, dim)
-        self.X = None  # Store accumulated samples when using as_additional_points
+        self.doe_type = actual
+        self.strategy = DOEFactory.create(actual, dim)
+        self.X = None  # Store accumulated samples when using as_additional_samples
 
-    def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
+    def sample(self, n_samples: Optional[int] = None, N: Optional[int] = None, as_additional_samples: bool = False, as_additional_points: Optional[bool] = None) -> np.ndarray:
         """
         Generate N samples in [-1,1]^dim.
 
@@ -47,9 +49,17 @@ class DOE_cls:
         Returns:
             numpy array of shape (N, dim) with samples in [-1,1]
         """
-        X_new = self.strategy.sample(N, as_additional_points=as_additional_points)
-        
-        if as_additional_points:
+        # resolve legacy kwargs
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        X_new = self.strategy.sample(n_samples, as_additional_samples=as_additional_samples)
+
+        if as_additional_samples:
             if self.X is None:
                 self.X = X_new
             else:

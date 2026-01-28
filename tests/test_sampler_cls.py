@@ -106,7 +106,7 @@ def test_sampler_uniform():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        compute_QoIs=simple_qoi,
+        qoi_fn=simple_qoi,
         n_out=2
     )
     
@@ -134,7 +134,7 @@ def test_sampler_loguniform():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        compute_QoIs=simple_qoi_1d,
+        qoi_fn=simple_qoi_1d,
         n_out=2
     )
     
@@ -173,7 +173,7 @@ def test_sampler_sigmoid_qoi():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        compute_QoIs=sigmoid_qoi,
+        qoi_fn=sigmoid_qoi,
         n_out=2
     )
 
@@ -230,7 +230,7 @@ def test_sampler_incremental_sampling():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        compute_QoIs=simple_qoi_1d,
+        qoi_fn=simple_qoi_1d,
         n_out=2
     )
     
@@ -270,7 +270,7 @@ def test_sampler_sg():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        compute_QoIs=simple_qoi,
+        qoi_fn=simple_qoi,
         n_out=2
     )
     
@@ -376,7 +376,7 @@ def plot_all_tests():
     sampler_uniform = sampler_cls(
         distributions=['uniform', 'uniform'],
         bounds=[[0, 1], [0, 2]],
-        compute_QoIs=simple_qoi,
+        qoi_fn=simple_qoi,
         n_out=2
     )
     sampler_uniform.sample(N=30)

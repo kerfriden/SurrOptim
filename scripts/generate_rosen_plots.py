@@ -25,7 +25,7 @@ def main() -> None:
         sampler = sampler_cls(
             distributions=["uniform", "uniform"],
             bounds=[[-2, 2], [-2, 2]],
-            compute_QoIs=rosen_qoi,
+            qoi_fn=rosen_qoi,
             n_out=2,
         )
         sampler.sample(N=N)

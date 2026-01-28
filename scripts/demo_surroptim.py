@@ -71,7 +71,7 @@ sampler = sampler_cls(
     distributions=["log_uniform", "uniform"],
     bounds=[[np.exp(-2), np.exp(2.)], [-2., 2.]],
     active_keys=['x', 'y'],
-    compute_QoIs=sigmoid_qoi,
+    qoi_fn=sigmoid_qoi,
     DOE_type='QRS',
     seed=0
 )

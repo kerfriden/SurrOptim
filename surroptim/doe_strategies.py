@@ -19,7 +19,7 @@ class DOEStrategy(ABC):
     """Abstract base class for Design of Experiments strategies."""
 
     @abstractmethod
-    def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
+    def sample(self, n_samples: Optional[int] = None, N: Optional[int] = None, as_additional_samples: bool = False, as_additional_points: Optional[bool] = None) -> np.ndarray:
         """
         Generate N samples in [-1,1]^dim.
 
@@ -44,14 +44,25 @@ class PRSStrategy(DOEStrategy):
         self.rng = np.random.default_rng(seed)
         self.X = None
 
-    def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
-        """Generate N uniform random samples in [-1,1]^dim."""
-        if N <= 0:
-            raise ValueError(f"Number of samples must be positive, got {N}")
-        
-        X = 2 * self.rng.random((N, self.dim)) - 1
+    def sample(self, n_samples: Optional[int] = None, N: Optional[int] = None, as_additional_samples: bool = False, as_additional_points: Optional[bool] = None) -> np.ndarray:
+        """Generate n_samples uniform random samples in [-1,1]^dim.
 
-        if as_additional_points and self.X is not None:
+        Accepts legacy argument names `N` and `as_additional_points` for backward compatibility.
+        """
+        # resolve legacy names
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        if n_samples <= 0:
+            raise ValueError(f"Number of samples must be positive, got {n_samples}")
+
+        X = 2 * self.rng.random((n_samples, self.dim)) - 1
+
+        if as_additional_samples and self.X is not None:
             self.X = np.concatenate((self.X, X), axis=0)
         else:
             self.X = X
@@ -69,16 +80,27 @@ class LHSStrategy(DOEStrategy):
         self.seed = seed
         self.X = None
 
-    def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
-        """Generate N Latin Hypercube samples in [-1,1]^dim."""
-        if N <= 0:
-            raise ValueError(f"Number of samples must be positive, got {N}")
-        
+    def sample(self, n_samples: Optional[int] = None, N: Optional[int] = None, as_additional_samples: bool = False, as_additional_points: Optional[bool] = None) -> np.ndarray:
+        """Generate n_samples Latin Hypercube samples in [-1,1]^dim.
+
+        Accepts legacy argument names `N` and `as_additional_points` for backward compatibility.
+        """
+        # resolve legacy names
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        if n_samples <= 0:
+            raise ValueError(f"Number of samples must be positive, got {n_samples}")
+
         from scipy.stats import qmc
         sampler = qmc.LatinHypercube(d=self.dim, seed=self.seed)
-        X = 2 * sampler.random(n=N) - 1
+        X = 2 * sampler.random(n=n_samples) - 1
 
-        if as_additional_points and self.X is not None:
+        if as_additional_samples and self.X is not None:
             self.X = np.concatenate((self.X, X), axis=0)
         else:
             self.X = X
@@ -102,24 +124,35 @@ class QRSStrategy(DOEStrategy):
         self.X = None
         self.index = 0
 
-    def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
-        """Draw N points from Sobol sequence in [-1,1]^dim."""
-        if N <= 0:
-            raise ValueError(f"Number of samples must be positive, got {N}")
-        if N + self.index > len(self.X_all):
+    def sample(self, n_samples: Optional[int] = None, N: Optional[int] = None, as_additional_samples: bool = False, as_additional_points: Optional[bool] = None) -> np.ndarray:
+        """Draw n_samples points from Sobol sequence in [-1,1]^dim.
+
+        Accepts legacy argument names `N` and `as_additional_points` for backward compatibility.
+        """
+        # resolve legacy names
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        if n_samples <= 0:
+            raise ValueError(f"Number of samples must be positive, got {n_samples}")
+        if n_samples + self.index > len(self.X_all):
             raise ValueError(
-                f"Requested {N} samples at index {self.index}, but only "
+                f"Requested {n_samples} samples at index {self.index}, but only "
                 f"{len(self.X_all)} points available"
             )
 
-        if as_additional_points and self.X is not None:
-            X = 2 * self.X_all[self.index:(self.index + N), :] - 1
-            self.X = 2 * self.X_all[:(self.index + N), :] - 1
+        if as_additional_samples and self.X is not None:
+            X = 2 * self.X_all[self.index:(self.index + n_samples), :] - 1
+            self.X = 2 * self.X_all[:(self.index + n_samples), :] - 1
         else:
-            X = 2 * self.X_all[:N, :] - 1
+            X = 2 * self.X_all[:n_samples, :] - 1
             self.X = X
 
-        self.index += N
+        self.index += n_samples
         return X
 
 
@@ -133,17 +166,28 @@ class SGStrategy(DOEStrategy):
         self.seed = seed  # Sparse grids are deterministic, seed not used
         self.X = None
 
-    def sample(self, N: int, as_additional_points: bool = False) -> np.ndarray:
-        """Generate sparse grid samples (N is refinement level)."""
-        if N <= 0:
-            raise ValueError(f"Refinement level must be positive, got {N}")
+    def sample(self, n_samples: Optional[int] = None, N: Optional[int] = None, as_additional_samples: bool = False, as_additional_points: Optional[bool] = None) -> np.ndarray:
+        """Generate sparse grid samples (n_samples is refinement level).
+
+        Accepts legacy argument names `N` and `as_additional_points` for backward compatibility.
+        """
+        # resolve legacy names
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        if n_samples <= 0:
+            raise ValueError(f"Refinement level must be positive, got {n_samples}")
 
         from surroptim.sparse_grid import generate_sparse_grid
 
-        # N represents the refinement level for sparse grids; already in [-1,1]
-        X = generate_sparse_grid(self.dim, N)
+        # n_samples represents the refinement level for sparse grids; already in [-1,1]
+        X = generate_sparse_grid(self.dim, n_samples)
 
-        if as_additional_points and self.X is not None:
+        if as_additional_samples and self.X is not None:
             # Find points in X not already in self.X
             mask = np.isin(
                 X.view([('', X.dtype)] * X.shape[1]),

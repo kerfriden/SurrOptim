@@ -6,6 +6,7 @@ with parameter transformations and QoI computation.
 """
 
 import numpy as np
+import warnings
 from typing import List, Callable, Optional, Dict, Tuple
 import matplotlib.pyplot as plt
 
@@ -21,7 +22,7 @@ class sampler_cls:
         distributions: List of distribution types for each parameter
         bounds: List of distribution parameters for each parameter
         active_keys: Optional list of parameter names
-        compute_QoIs: Callable that computes QoI from parameters
+            QoIs: Callable that computes QoI from parameters
         plot_solution: Optional callable for visualization
         n_out: Number of QoI outputs (auto-detected if None)
     """
@@ -31,11 +32,12 @@ class sampler_cls:
         distributions: List[str],
         bounds: List[list],
         active_keys: Optional[List[str]] = None,
-        compute_QoIs: Optional[Callable] = None,
+        qoi_fn: Optional[Callable] = None,
         plot_solution: Optional[Callable] = None,
         n_out: Optional[int] = None,
         seed: Optional[int] = None,
-        DOE_type: str = 'LHS',
+        doe_type: str = 'LHS',
+        DOE_type: Optional[str] = None,
     ):
         """
         Initialize sampler with distribution specifications.
@@ -44,7 +46,7 @@ class sampler_cls:
             distributions: List of distribution types ('uniform', 'log_uniform', 'normal', 'lognormal')
             bounds: List of [param1, param2] for each dimension
             active_keys: Optional parameter names
-            compute_QoIs: Function(params_dict) -> QoI array
+                qoi_fn: Function(params_dict) -> QoI array
             plot_solution: Optional visualization function
             n_out: Number of QoI outputs (auto-detected if None)
             seed: Random seed for reproducible sampling (None for random behavior)
@@ -66,11 +68,14 @@ class sampler_cls:
         self.distributions = distributions
         self.bounds = bounds
         self.active_keys = active_keys
-        self.compute_QoIs = compute_QoIs
+        self.qoi_fn = qoi_fn
         self.seed = int(seed) if seed is not None else None
         self.plot_solution = plot_solution
         self.n_out = n_out
-        self.DOE_type = DOE_type
+        # backward compatibility: accept DOE_type as legacy keyword
+        self.doe_type = DOE_type if DOE_type is not None else doe_type
+        # backward-compatible attribute name
+        self.DOE_type = self.doe_type
 
         # Create distribution strategy instances
         self.distribution_strategies = [DistributionFactory.create(t) for t in distributions]
@@ -84,10 +89,10 @@ class sampler_cls:
             print(f"bounds of distribution for dimension {i}: {self.bounds[i]}")
 
         # Auto-detect n_out if not provided
-        if n_out is None and compute_QoIs is not None:
+        if n_out is None and qoi_fn is not None:
             self._detect_n_out()
 
-        if compute_QoIs is not None:
+        if qoi_fn is not None:
             print(f"n_out: {self.n_out}")
 
         # Storage for samples (X is computed on-demand from X_reference)
@@ -104,20 +109,25 @@ class sampler_cls:
             return None
         return self._reference_to_physical_samples(self.X_reference)
 
+    # New preferred lowercase aliases with backward-compat read-only mapping
+    @property
+    def x(self) -> Optional[np.ndarray]:
+        return self.X
+
     def _detect_n_out(self) -> None:
-        """Auto-detect number of QoI outputs by calling compute_QoIs at center point."""
+        """Auto-detect number of QoI outputs by calling `qoi_fn` at center point."""
         print("n_out not provided -> calling FEA solver for automatic determination")
 
         X = self._get_center_point()
 
         if self.active_keys is not None:
             params_dict = {self.active_keys[i]: X[0, i] for i in range(len(self.active_keys))}
-            QoIs = self.compute_QoIs(params_dict)
+            qval = self.qoi_fn(params_dict)
         else:
-            QoIs = self.compute_QoIs(X)
+            qval = self.qoi_fn(X)
 
-        print(f"QoIs at test point: {QoIs}")
-        self.n_out = np.max(QoIs.shape)
+        print(f"QoIs at test point: {qval}")
+        self.n_out = np.max(np.asarray(qval).shape)
 
     def _get_center_point(self) -> np.ndarray:
         """Get center point in physical space based on distribution types."""
@@ -143,8 +153,10 @@ class sampler_cls:
 
     def sample(
         self,
-        N: int,
-        as_additional_points: bool = False,
+        n_samples: Optional[int] = None,
+        N: Optional[int] = None,
+        as_additional_samples: bool = False,
+        as_additional_points: Optional[bool] = None,
         plot: bool = False,
         sample_in_batch: bool = False,
     ) -> None:
@@ -161,19 +173,28 @@ class sampler_cls:
             ValueError: If DOE_type is invalid
         """
         # Setup DOE strategy
-        if self.sampler_doe is None or not as_additional_points:
-            if self.sampler_doe is not None and not as_additional_points:
+        # resolve backward-compatible args
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        if self.sampler_doe is None or not as_additional_samples:
+            if self.sampler_doe is not None and not as_additional_samples:
                 print(
-                    "Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling."
+                    "Warning: Sampling is being reinitialized. Set as_additional_samples=True to continue sampling."
                 )
             try:
-                self.sampler_doe = DOEFactory.create(self.DOE_type, len(self.bounds), seed=self.seed)
+                self.sampler_doe = DOEFactory.create(self.doe_type, len(self.bounds), seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
-            X_reference = self.sampler_doe.sample(N, as_additional_points=False)
+            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
         else:
             # Reuse existing DOE sampler and append points
-            X_reference = self.sampler_doe.sample(N, as_additional_points=True)
+            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
 
         # Denormalize samples
         X = self._reference_to_physical_samples(X_reference)
@@ -184,13 +205,13 @@ class sampler_cls:
         else:
             Y = None
 
-        sample_type = "additional samples" if as_additional_points and self.X_reference is not None else "samples"
+        sample_type = "additional samples" if as_additional_samples and self.X_reference is not None else "samples"
         print(
             f"Start computing {len(X_reference)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}"
         )
 
         # Evaluate samples
-        if sample_in_batch and self.compute_QoIs is not None:
+        if sample_in_batch and self.qoi_fn is not None:
             Y = self._evaluate_batch(X)
         else:
             Y = self._evaluate_sequential(X, plot)
@@ -206,28 +227,25 @@ class sampler_cls:
 
         for j in range(len(self.bounds)):
             X[:, j] = self.distribution_strategies[j].denormalise(X_reference[:, j], self.bounds[j])
-
         return X
 
     def _physical_to_reference_samples(self, X: np.ndarray) -> np.ndarray:
-        """Transform samples from physical space to reference space [-1,1]^n."""
-        X_reference = np.zeros_like(X)
-
+        """Transform samples from physical space to reference [-1,1]^n."""
+        Z = np.zeros_like(X)
         for j in range(len(self.bounds)):
-            X_reference[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
-
-        return X_reference
+            Z[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
+        return Z
 
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         """Evaluate all samples at once."""
-        if self.compute_QoIs is None:
+        if self.qoi_fn is None:
             return None
 
         if self.active_keys is not None:
             raise NotImplementedError("Batch evaluation not yet implemented for dimension mapping")
 
         try:
-            return self.compute_QoIs(X)
+            return self.qoi_fn(X)
         except TypeError as e:
             raise TypeError(
                 f"QoI evaluation failed: {e}. "
@@ -237,7 +255,7 @@ class sampler_cls:
 
     def _evaluate_sequential(self, X: np.ndarray, plot: bool = False) -> Optional[np.ndarray]:
         """Evaluate samples sequentially with optional visualization."""
-        if self.compute_QoIs is None:
+        if self.qoi_fn is None:
             return None
 
         Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
@@ -246,9 +264,9 @@ class sampler_cls:
             try:
                 if self.active_keys is not None:
                     params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
-                    Y[i, :] = self.compute_QoIs(params_dict)
+                    Y[i, :] = self.qoi_fn(params_dict)
                 else:
-                    Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
+                    Y[i, :] = self.qoi_fn(X[i, :].reshape(1, -1))
             except TypeError as e:
                 if self.active_keys is not None:
                     raise TypeError(
@@ -285,6 +303,10 @@ class sampler_cls:
             self.X_reference = np.concatenate((self.X_reference, X_reference), axis=0)
             if Y is not None and self.Y is not None:
                 self.Y = np.concatenate((self.Y, Y), axis=0)
+
+    @property
+    def y(self) -> Optional[np.ndarray]:
+        return self.Y
 
     def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
         """
@@ -351,22 +373,26 @@ class sampler_new_cls:
     def __init__(
         self,
         params,
-        compute_QoIs: Optional[Callable] = None,
+        qoi_fn: Optional[Callable] = None,
         active_keys: Optional[List[str]] = None,
         seed: Optional[int] = None,
-        DOE_type: str = 'LHS',
+        doe_type: str = 'LHS',
+        DOE_type: Optional[str] = None,
     ):
         # params is expected to encapsulate parameter layout and optionally
-        # metadata like n_out. Accept compute_QoIs and active_keys as explicit
+        # metadata like n_out. Accept qoi_fn and active_keys as explicit
         # constructor args that override any attributes on the params object.
         self.params = params
-        self.compute_QoIs = compute_QoIs if compute_QoIs is not None else getattr(params, "compute_QoIs", None)
+        self.qoi_fn = qoi_fn
         self.active_keys = active_keys if active_keys is not None else getattr(params, "active_keys", None)
         self.seed = int(seed) if seed is not None else None
         # plotting is not supported by sampler_new_cls; omit plot_solution
-        # n_out is not stored on params; detect from compute_QoIs when needed
+        # n_out is not stored on params; detect from the provided `qoi_fn` when needed
         self.n_out = None
-        self.DOE_type = DOE_type
+        # backward compatibility for constructor kwarg
+        # backward-compatible attribute name
+        self.doe_type = DOE_type if DOE_type is not None else doe_type
+        self.DOE_type = self.doe_type
 
         # Use the parameter processor's dimension
         self.dim = int(self.params.dim)
@@ -380,7 +406,7 @@ class sampler_new_cls:
             for i, k in enumerate(self.active_keys):
                 print(f"parameter dimension {i}: {k}")
 
-        if self.compute_QoIs is not None:
+        if self.qoi_fn is not None:
             self._detect_n_out()
             print(f"n_out: {self.n_out}")
 
@@ -395,6 +421,10 @@ class sampler_new_cls:
         if self.X_reference is None:
             return None
         return self.reference_to_physical(self.X_reference)
+
+    @property
+    def x(self) -> Optional[np.ndarray]:
+        return self.X
 
     @property
     def X_gaussian(self) -> Optional[np.ndarray]:
@@ -421,23 +451,100 @@ class sampler_new_cls:
         # Prefer named dict input when the params processor provides an unpack method
         if self.active_keys is not None or hasattr(self.params, "unpack"):
             params_dict = self.params.unpack(x_center)
-            QoIs = self.compute_QoIs(params_dict)
+            qval = self.qoi_fn(params_dict)
         else:
-            QoIs = self.compute_QoIs(x_center)
-        print(f"QoIs at test point: {QoIs}")
-        self.n_out = np.max(np.asarray(QoIs).shape)
+            qval = self.qoi_fn(x_center)
+        print(f"QoIs at test point: {qval}")
+        # If QoIs returns a dict, build layout to allow slicing by key
+        if isinstance(qval, dict):
+            self._build_qoi_layout(qval)
+            self.n_out = self.qoi_dim
+        else:
+            arr = np.asarray(qval)
+            self.qoi_dim = int(arr.size) if arr.size is not None else int(np.max(arr.shape))
+            self._qoi_layout = None
+            self.n_out = self.qoi_dim
 
-    def sample(self, N: int, as_additional_points: bool = False) -> None:
-        if self.sampler_doe is None or not as_additional_points:
-            if self.sampler_doe is not None and not as_additional_points:
-                print("Warning: Sampling is being reinitialized. Set as_additional_points=True to continue sampling.")
+    def _build_qoi_layout(self, qoi_dict: dict) -> None:
+        """Build layout mapping QoI dict keys to flattened index ranges."""
+        layout = []
+        cursor = 0
+        for key, val in qoi_dict.items():
+            arr = np.asarray(val)
+            size = int(arr.size)
+            sl = slice(cursor, cursor + size)
+            layout.append({"key": key, "shape": arr.shape, "size": size, "sl": sl})
+            cursor += size
+        self._qoi_layout = layout
+        self.qoi_dim = cursor
+
+    def qoi_slices(self, keys):
+        """Return slice(s) into the flattened QoI vector for key(s).
+
+        If `keys` is a string, returns a single `slice` for that key. If
+        `keys` is a sequence, returns a dict mapping each key to its slice.
+        Raises KeyError if the layout is unavailable or a key is missing.
+        """
+        if self._qoi_layout is None:
+            raise KeyError("QoI layout not available (QoIs did not return a dict during detection)")
+
+        def _single(k: str) -> slice:
+            for item in self._qoi_layout:
+                if item["key"] == k:
+                    return item["sl"]
+            raise KeyError(f"QoI key '{k}' not found")
+
+        if isinstance(keys, str):
+            return _single(keys)
+        return {k: _single(k) for k in keys}
+
+    def qoi_indices(self, keys):
+        """Return integer index array(s) for QoI key(s).
+
+        If `keys` is a string, returns a 1D `np.ndarray` of indices for that
+        key. If `keys` is a sequence, returns a concatenated 1D `np.ndarray`
+        of indices in the order of `keys` provided.
+        """
+        if isinstance(keys, str):
+            sl = self.qoi_slices(keys)
+            return np.arange(sl.start, sl.stop)
+
+        mapping = self.qoi_slices(keys)
+        parts = [np.arange(mapping[k].start, mapping[k].stop) for k in keys]
+        if not parts:
+            return np.array([], dtype=int)
+        return np.concatenate(parts)
+
+    
+
+    def sample(
+        self,
+        n_samples: Optional[int] = None,
+        N: Optional[int] = None,
+        as_additional_samples: bool = False,
+        as_additional_points: Optional[bool] = None,
+        plot: bool = False,
+        batch_computation: bool = False,
+    ) -> None:
+        # resolve backward-compatible args
+        if n_samples is None:
+            if N is None:
+                raise ValueError("n_samples (or legacy N) must be provided")
+            n_samples = N
+
+        if as_additional_points is not None:
+            as_additional_samples = as_additional_points
+
+        if self.sampler_doe is None or not as_additional_samples:
+            if self.sampler_doe is not None and not as_additional_samples:
+                print("Warning: Sampling is being reinitialized. Set as_additional_samples=True to continue sampling.")
             try:
-                self.sampler_doe = DOEFactory.create(self.DOE_type, self.dim, seed=self.seed)
+                self.sampler_doe = DOEFactory.create(self.doe_type, self.dim, seed=self.seed)
             except ValueError as e:
                 raise ValueError(f"Invalid DOE type: {e}")
-            X_reference = self.sampler_doe.sample(N, as_additional_points=False)
+            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=False)
         else:
-            X_reference = self.sampler_doe.sample(N, as_additional_points=True)
+            X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
 
         # Convert reference -> physical using params processor
         X = self.reference_to_physical(X_reference)
@@ -447,10 +554,15 @@ class sampler_new_cls:
         else:
             Y = None
 
-        sample_type = "additional samples" if as_additional_points and self.X_reference is not None else "samples"
+        sample_type = "additional samples" if as_additional_samples and self.X_reference is not None else "samples"
         print(f"Start computing {len(X_reference)} {sample_type} in parametric dimension {self.dim} using {self.DOE_type}")
 
-        Y = self._evaluate_sequential(X)
+        # Decide batch vs sequential based on params processor mode and caller preference
+        can_batch = getattr(self.params, "_mode", None) == "array"
+        if batch_computation and can_batch and self.qoi_fn is not None:
+            Y = self._evaluate_batch(X)
+        else:
+            Y = self._evaluate_sequential(X)
 
         print("... done sampling")
 
@@ -465,26 +577,103 @@ class sampler_new_cls:
         return self.params.physical_to_reference(X)
 
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
-        if self.compute_QoIs is None:
+        if self.qoi_fn is None:
             return None
-        if self.active_keys is not None or hasattr(self.params, "unpack"):
-            raise NotImplementedError("Batch evaluation not implemented for active_keys/unpack mapping")
+
+        # If params.unpack exists, ask it to convert the packed X to the
+        # form expected by the QoI. For array-style processors this will be
+        # a (M,N) ndarray and can be passed directly to the QoI function.
+        if hasattr(self.params, "unpack"):
+            unpacked = self.params.unpack(X)
+            # array-style unpack -> pass batched array to QoI
+            if isinstance(unpacked, np.ndarray):
+                try:
+                    out = self.qoi_fn(unpacked)
+                except TypeError:
+                    # Fallback: QoI may expect single-sample arrays; warn and evaluate sequentially
+                    warnings.warn(
+                        "Batch QoI evaluation failed; falling back to sequential evaluation",
+                        UserWarning,
+                    )
+                    outs = []
+                    for i in range(unpacked.shape[0]):
+                        oi = self.qoi_fn(unpacked[i])
+                        outs.append(np.asarray(oi).ravel())
+                    return np.vstack(outs)
+
+                # If QoI returned a dict for batched input, flatten accordingly
+                if isinstance(out, dict):
+                    keys = list(out.keys())
+                    parts = []
+                    layout = []
+                    cursor = 0
+                    for k in keys:
+                        v = np.asarray(out[k])
+                        if v.ndim == 0:
+                            v = v.reshape(1, 1)
+                        elif v.ndim == 1:
+                            v = v.reshape(-1, 1)
+                        m = v.shape[0]
+                        per_sample_size = int(np.prod(v.shape[1:]))
+                        layout.append({"key": k, "shape": v.shape[1:], "size": per_sample_size, "sl": slice(cursor, cursor + per_sample_size)})
+                        cursor += per_sample_size
+                        parts.append(v.reshape(m, -1))
+                    # save layout and qoi_dim
+                    self._qoi_layout = layout
+                    self.qoi_dim = cursor
+                    self.n_out = cursor
+                    return np.concatenate(parts, axis=1)
+
+                return np.asarray(out)
+
+            # dict-style unpack not supported in batch mode
+            raise NotImplementedError("Batch evaluation not implemented for dict-style QoIs (use sequential evaluation)")
+
+        # No unpacking required; pass X directly
         try:
-            return self.compute_QoIs(X)
+            return self.qoi_fn(X)
         except TypeError as e:
             raise TypeError(f"QoI evaluation failed: {e}") from e
 
     def _evaluate_sequential(self, X: np.ndarray) -> Optional[np.ndarray]:
-        if self.compute_QoIs is None:
+        if self.qoi_fn is None:
             return None
         Y = np.zeros((len(X), self.n_out)) if self.n_out is not None else None
         for i in range(len(X)):
             try:
-                if self.active_keys is not None or hasattr(self.params, 'unpack'):
-                    params_dict = self.params.unpack(X[i]) if hasattr(self.params, 'unpack') else {self.active_keys[j]: X[i,j] for j in range(len(self.active_keys))}
-                    Y[i, :] = self.compute_QoIs(params_dict)
+                if self.active_keys is not None:
+                    params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
+                    out = self.qoi_fn(params_dict)
+                elif hasattr(self.params, 'unpack'):
+                    unpacked = self.params.unpack(X[i])
+                    # If unpack returns an ndarray (array-style processor), pass
+                    # the flat array to the QoI; otherwise assume dict and pass it.
+                    if isinstance(unpacked, np.ndarray):
+                        to_call = unpacked if unpacked.ndim == 1 else unpacked.reshape(unpacked.shape)
+                        out = self.qoi_fn(to_call)
+                    else:
+                        out = self.qoi_fn(unpacked)
                 else:
-                    Y[i, :] = self.compute_QoIs(X[i, :].reshape(1, -1))
+                    out = self.qoi_fn(X[i, :].reshape(1, -1))
+
+                # normalize output to array or dict
+                if isinstance(out, dict):
+                    # need qoi layout to flatten dict consistently
+                    if self._qoi_layout is None:
+                        # build layout from this single sample
+                        self._build_qoi_layout(out)
+                        self.n_out = self.qoi_dim
+                        # resize Y if necessary
+                        if Y is None:
+                            Y = np.zeros((len(X), self.n_out))
+                    parts = []
+                    for item in self._qoi_layout:
+                        key = item['key']
+                        val = np.asarray(out[key]).ravel()
+                        parts.append(val)
+                    Y[i, :] = np.concatenate(parts)
+                else:
+                    Y[i, :] = np.asarray(out).ravel()
             except TypeError:
                 raise
         return Y
@@ -497,4 +686,8 @@ class sampler_new_cls:
             self.X_reference = np.concatenate((self.X_reference, X_reference), axis=0)
             if Y is not None and self.Y is not None:
                 self.Y = np.concatenate((self.Y, Y), axis=0)
+
+    @property
+    def y(self) -> Optional[np.ndarray]:
+        return self.Y
     

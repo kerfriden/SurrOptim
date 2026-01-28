@@ -36,7 +36,7 @@ def test_sampler_new_cls_incremental_sigmoid():
         params=P,
         DOE_type="QRS",
         seed=0,
-        compute_QoIs=sigmoid_qoi,
+        qoi_fn=sigmoid_qoi,
     )
 
     # first batch

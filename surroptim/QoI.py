@@ -1,3 +1,10 @@
+"""Backward-compat shim for `qoi` module.
+
+This file keeps the old module path `surroptim.QoI` working by
+re-exporting the `QoI_cls` from the canonical `surroptim.qoi` module.
+"""
+
+from .qoi import QoI_cls  # noqa: F401
 import numpy as np
 from typing import Dict, Any, List, Optional, Callable
 

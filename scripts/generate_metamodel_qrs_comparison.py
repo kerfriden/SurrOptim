@@ -64,7 +64,7 @@ def run_case(
     sampler = sampler_cls(
         distributions=["uniform", "uniform"],
         bounds=[[-2, 2], [-2, 2]],
-        compute_QoIs=sigmoid_qoi,
+        qoi_fn=sigmoid_qoi,
         DOE_type="QRS",
     )
     sampler.sample(N=N_samples)

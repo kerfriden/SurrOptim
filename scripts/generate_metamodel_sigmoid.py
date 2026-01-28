@@ -24,7 +24,7 @@ def run_case(case_name: str, doe_type: str, N: int, model, grid_points_physical:
     sampler = sampler_cls(
         distributions=["uniform", "uniform"],
         bounds=[[-2, 2], [-2, 2]],
-        compute_QoIs=sigmoid_qoi,
+        qoi_fn=sigmoid_qoi,
         DOE_type=doe_type,
     )
     sampler.sample(N=N)
