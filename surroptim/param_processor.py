@@ -155,7 +155,16 @@ def _trim_selects_last_wins(active_specs, base_params, *, verbose=False, log=pri
 # ParameterProcessor
 # ============================================================
 
-class ParameterProcessor:
+class ParameterBaseProcessor:
+    """Common base class for parameter processors.
+
+    Concrete processors should initialize layout/base attributes and
+    implement any specialized packing/unpacking or delegation as needed.
+    """
+    pass
+
+
+class ParameterDictProcessor(ParameterBaseProcessor):
     """
     - dict <-> packed physical vector(s)
     - physical <-> reference z in [-1,1]^N (linear/log distributions)
@@ -241,6 +250,303 @@ class ParameterProcessor:
             })
 
         self.dim = cursor
+
+    def _as_X(self, x_or_X):
+        """Accept (N,), (M,N), list-of-(N,) -> returns (X, is_batch)."""
+        if isinstance(x_or_X, list):
+            X = np.asarray(x_or_X, dtype=float)
+        else:
+            X = np.asarray(x_or_X, dtype=float)
+
+        if X.ndim == 1:
+            if X.size != self.dim:
+                raise ValueError(f"Expected length {self.dim}, got {X.size}")
+            return X[None, :], False
+        if X.ndim == 2:
+            if X.shape[1] != self.dim:
+                raise ValueError(f"Expected shape (M,{self.dim}), got {X.shape}")
+            return X, True
+        raise ValueError(f"Expected 1D or 2D array (or list), got ndim={X.ndim}")
+
+    # ---- dict <-> packed physical ----
+    def pack(self, params_or_list):
+        """dict -> (N,) OR list[dict] -> (M,N), physical packed."""
+        if isinstance(params_or_list, list):
+            return np.stack([self.pack(d) for d in params_or_list], axis=0)
+
+        params = params_or_list
+        params_np = {k: np.asarray(v) for k, v in params.items()}
+        x = np.zeros(self.dim, dtype=float)
+
+        for it in self._layout:
+            p, mask, sl = it["param"], it["mask"], it["sl"]
+            arr = np.asarray(params_np.get(p, self.base[p]))
+            if arr.shape == ():
+                x[sl] = float(arr)
+            else:
+                x[sl] = np.asarray(arr[mask], dtype=float).ravel()
+        return x
+
+    def unpack(self, x_or_X):
+        """(N,) -> dict OR (M,N)/list -> list[dict], physical packed -> dict(s)."""
+        X, is_batch = self._as_X(x_or_X)
+        outs = []
+        for i in range(X.shape[0]):
+            x = X[i]
+            out = {k: v.copy() for k, v in self.base.items()}
+            for it in self._layout:
+                p, mask, sl = it["param"], it["mask"], it["sl"]
+                arr = out[p]
+                if np.asarray(arr).shape == ():
+                    out[p] = float(x[sl][0])
+                else:
+                    a = np.asarray(arr).copy()
+                    a[mask] = x[sl]
+                    out[p] = a
+
+            # cast scalar keys to python floats for nicer dicts
+            for k in self._scalar_keys:
+                if k in out and np.asarray(out[k]).shape == ():
+                    out[k] = float(out[k])
+
+            outs.append(out)
+
+        return outs if is_batch else outs[0]
+
+    # ---- physical <-> unit [-1,1]^N ----
+    def physical_to_unit(self, x_or_X, *, clip=False):
+        """Alias name kept for compatibility: physical -> reference (-1,1).
+
+        Use `physical_to_reference` terminology where possible. If `clip=True`,
+        values are clipped to the declared bounds prior to mapping.
+        """
+        X, is_batch = self._as_X(x_or_X)
+        Z = np.zeros_like(X)
+
+        for it in self._layout:
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
+            Y = X[:, sl]
+            if clip:
+                Y = np.clip(Y, lo, hi)
+
+            if distribution == "linear":
+                t = (Y - lo) / (hi - lo)
+            else:  # log
+                if np.any(Y <= 0):
+                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
+                t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"])
+
+            Z[:, sl] = 2.0 * t - 1.0
+
+        return Z if is_batch else Z[0]
+
+    def physical_to_reference(self, x_or_X, *, clip=False):
+        """Map physical parameters to reference space in [-1, 1].
+
+        If `clip=True` values are clipped to the active bounds before mapping.
+        """
+        X, is_batch = self._as_X(x_or_X)
+        Z = np.zeros_like(X)
+
+        for it in self._layout:
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
+            Y = X[:, sl]
+            if clip:
+                Y = np.clip(Y, lo, hi)
+
+            if distribution == "linear":
+                t = (Y - lo) / (hi - lo)
+            else:  # log
+                if np.any(Y <= 0):
+                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
+                t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"])
+
+            Z[:, sl] = 2.0 * t - 1.0
+
+        return Z if is_batch else Z[0]
+
+    def reference_to_physical(self, z_or_Z, *, clip=False):
+        """Map reference values in [-1, 1] back to physical parameter values.
+
+        Raises ValueError if input is outside [-1,1] unless `clip=True` is used
+        on the upstream `physical_to_reference` call.
+        """
+        Z, is_batch = self._as_X(z_or_Z)
+        X = np.zeros_like(Z)
+
+        for it in self._layout:
+            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
+            t = 0.5 * (Z[:, sl] + 1.0)
+            if clip:
+                t = np.clip(t, 0.0, 1.0)
+
+            if distribution == "linear":
+                Y = lo + t * (hi - lo)
+            else:  # log
+                Y = np.exp(it["loglo"] + t * (it["loghi"] - it["loglo"]))
+
+            X[:, sl] = Y
+
+        return X if is_batch else X[0]
+
+    # Backward-compatibility aliases (old names -> new names)
+    unit_to_physical = reference_to_physical
+    physical_to_unit = physical_to_reference
+
+    def pack_unit(self, params_or_list, *, clip=False):
+        """Compatibility: pack physical dict to reference vector (-1,1)."""
+        return self.physical_to_unit(self.pack(params_or_list), clip=clip)
+
+    def unpack_unit(self, z_or_Z, *, clip=False):
+        """Compatibility: unpack reference vector (-1,1) to physical dict."""
+        return self.unpack(self.reference_to_physical(z_or_Z, clip=clip))
+
+    # ---- unit <-> gaussian ----
+    def unit_to_gauss(self, z_or_Z, *, eps=None):
+        """Convert reference Z in [-1,1] to gaussian space via inverse CDF.
+
+        Raises ValueError if input reference values lie outside [-1,1].
+        """
+        Z, is_batch = self._as_X(z_or_Z)
+        # Validate reference range
+        if np.any(Z < -1.0) or np.any(Z > 1.0):
+            raise ValueError("Reference values must be within [-1, 1].")
+        eps = self.eps if eps is None else float(eps)
+
+        U = 0.5 * (Z + 1.0)
+        U = np.clip(U, eps, 1.0 - eps)
+        G = norm_ppf(U)
+
+        return G if is_batch else G[0]
+
+    def gauss_to_unit(self, g_or_G):
+        """Convert gaussian values to reference Z in [-1,1]."""
+        G, is_batch = self._as_X(g_or_G)
+        U = norm_cdf(G)
+        Z = 2.0 * U - 1.0
+        return Z if is_batch else Z[0]
+
+    # ---- direct physical <-> gaussian ----
+    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        return self.unit_to_gauss(self.physical_to_reference(x_or_X, clip=clip), eps=eps)
+
+    def gauss_to_physical(self, g_or_G, *, clip=False):
+        return self.reference_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
+
+    # ---- convenience: reference -> dict and gauss -> dict ----
+    def unit_to_dict(self, z_or_Z, *, clip=False):
+        """Compatibility wrapper: convert reference vector to physical dict."""
+        return self.unpack_unit(z_or_Z, clip=clip)
+
+    def gauss_to_dict(self, g_or_G, *, clip=False):
+        return self.unpack(self.gauss_to_physical(g_or_G, clip=clip))
+
+    # New convenience shortcuts: gaussian -> physical (array or dict)
+    def gaussian_to_physical(self, g_or_G, *, clip=False):
+        """Convenience: convert gaussian values directly to physical packed array.
+
+        Equivalent to `reference_to_physical(gauss_to_unit(g))` but provided
+        as a single, discoverable method for convenience.
+        """
+        return self.gauss_to_physical(g_or_G, clip=clip)
+
+    def gaussian_to_physical_dict(self, g_or_G, *, clip=False):
+        """Convenience: convert gaussian values directly to an unpacked physical dict."""
+        return self.gauss_to_dict(g_or_G, clip=clip)
+
+    # Backward-compatible aliases for gaussian/reference naming
+    gaussian_to_reference = gauss_to_unit
+    reference_to_gaussian = unit_to_gauss
+    gaussian_to_physical = gauss_to_physical
+
+
+# Backward-compatible name for existing code
+ParameterProcessor = ParameterDictProcessor
+
+
+class ParameterArrayProcessor:
+    """Processor that accepts a flat numpy array as the base parameters and
+    an `active_specs` mapping that selects components of that array.
+
+    This class internally reuses `ParameterDictProcessor` by creating a
+    synthetic dict with a single entry `__arr` whose value is the provided
+    array. Each spec that does not declare a `param` is rewritten to target
+    the `__arr` entry.
+    """
+
+    def __init__(self, init_array: np.ndarray, active_specs: dict, *, verbose=False, log=print, eps=1e-12):
+        base = {"__arr": np.asarray(init_array).copy()}
+        # Make a shallow copy of specs and ensure each spec targets '__arr' by default
+        specs0 = {k: (v if v is False else dict(v)) for k, v in active_specs.items()}
+        for var_id, spec in list(specs0.items()):
+            if spec is False:
+                continue
+            if "param" not in spec:
+                spec["param"] = "__arr"
+            # Accept legacy key 'scale' and normalize it to 'distribution'
+            if "scale" in spec and "distribution" not in spec:
+                spec["distribution"] = spec["scale"]
+
+        # Delegate heavy lifting to dict-based processor
+        self._inner = ParameterDictProcessor(base, specs0, verbose=verbose, log=log, eps=eps)
+
+    @property
+    def dim(self):
+        return self._inner.dim
+
+    def pack(self, arr_or_list):
+        """Identity-like pack: accept (N,) or (M,N) arrays and validate shape."""
+        if isinstance(arr_or_list, list):
+            X = np.asarray(arr_or_list, dtype=float)
+        else:
+            X = np.asarray(arr_or_list, dtype=float)
+
+        if X.ndim == 1:
+            if X.size != self.dim:
+                raise ValueError(f"Expected length {self.dim}, got {X.size}")
+            return X.copy()
+        if X.ndim == 2:
+            if X.shape[1] != self.dim:
+                raise ValueError(f"Expected shape (M,{self.dim}), got {X.shape}")
+            return X.copy()
+        raise ValueError("Expected 1D or 2D array (or list)")
+
+    def unpack(self, x_or_X):
+        """Return the underlying array (or list of arrays) for a packed vector."""
+        X, is_batch = self._inner._as_X(x_or_X)
+        if is_batch:
+            return X.copy()
+        return X[0].copy()
+
+    # Delegate transform methods to inner processor which knows the layout
+    def physical_to_reference(self, x_or_X, *, clip=False):
+        return self._inner.physical_to_reference(x_or_X, clip=clip)
+
+    def reference_to_physical(self, z_or_Z, *, clip=False):
+        return self._inner.reference_to_physical(z_or_Z, clip=clip)
+
+    def unit_to_gauss(self, z_or_Z, *, eps=None):
+        return self._inner.unit_to_gauss(z_or_Z, eps=eps)
+
+    def gauss_to_unit(self, g_or_G):
+        return self._inner.gauss_to_unit(g_or_G)
+
+    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        return self._inner.physical_to_gauss(x_or_X, clip=clip, eps=eps)
+
+    def gauss_to_physical(self, g_or_G, *, clip=False):
+        return self._inner.gauss_to_physical(g_or_G, clip=clip)
+
+    # convenience
+    def gaussian_to_physical(self, g_or_G, *, clip=False):
+        return self._inner.gaussian_to_physical(g_or_G, clip=clip)
+
+    def gaussian_to_physical_dict(self, g_or_G, *, clip=False):
+        # inner returns dicts keyed by '__arr' but we expose array
+        d = self._inner.gauss_to_dict(g_or_G, clip=clip)
+        if isinstance(d, list):
+            return [di['__arr'] for di in d]
+        return d['__arr']
 
     def _as_X(self, x_or_X):
         """Accept (N,), (M,N), list-of-(N,) -> returns (X, is_batch)."""
