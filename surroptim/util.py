@@ -4,19 +4,69 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Minimal R2 implementation: 1 - SSE/SST.
+def r2_score(y_true: np.ndarray, y_pred: np.ndarray, multioutput: str = "uniform_average"):
+    """R² score with basic multi-output support and shape-tolerance.
 
-    Kept intentionally simple: returns 1 - sum((y-y_pred)^2)/sum((y-mean(y))^2).
+    - If inputs are 1-D returns a scalar R² = 1 - SSE/SST.
+    - If inputs are 2-D returns per-output R² values or an averaged scalar
+      depending on ``multioutput`` (follows sklearn's 'uniform_average' and
+      'raw_values' semantics; also supports 'variance_weighted').
+    - If ``y_pred`` has transposed shape (n_out, N) we automatically try
+      transposing it to match ``y_true``.
     """
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true, axis=0)) ** 2)
-    return 1.0 - ss_res / ss_tot
 
-# Backwards compatibility alias
-r2_score_simple = r2_score
+    # Try to auto-correct common transpose mismatch (n_out, N) vs (N, n_out)
+    if y_true.shape != y_pred.shape:
+        try:
+            if y_pred.T.shape == y_true.shape:
+                y_pred = y_pred.T
+        except Exception:
+            pass
+
+    if y_true.ndim == 1:
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        return 1.0 - ss_res / ss_tot
+
+    # At this point treat as multi-output: axis=1 indexes outputs
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    if y_true.ndim != 2:
+        raise ValueError("r2_score only supports 1D or 2D arrays")
+
+    n_out = y_true.shape[1]
+    per = np.empty(n_out, dtype=float)
+    denom = np.empty(n_out, dtype=float)
+    for j in range(n_out):
+        yt = y_true[:, j]
+        yp = y_pred[:, j]
+        ss_res = np.sum((yt - yp) ** 2)
+        ss_tot = np.sum((yt - np.mean(yt)) ** 2)
+        per[j] = 1.0 - ss_res / ss_tot
+        denom[j] = ss_tot
+
+    if multioutput == "raw_values":
+        return per
+    if multioutput == "uniform_average":
+        return float(np.mean(per))
+    if multioutput == "variance_weighted":
+        w = denom.sum()
+        if w == 0:
+            return float(np.mean(per))
+        return float((per * denom).sum() / w)
+
+    raise ValueError(f"Unknown multioutput value: {multioutput!r}")
+
+
+# Backwards compatibility alias for the original simple behavior
+def r2_score_simple(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    y_true = np.asarray(y_true).ravel()
+    y_pred = np.asarray(y_pred).ravel()
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return 1.0 - ss_res / ss_tot
 
 
 def prediction_plot(X=None, y=None, function=None, x_plot=None, y_plot=None, show=True, marker_color=True, clabel=None, xlabel=None, ylabel=None, xlim=None, ylim=None):
