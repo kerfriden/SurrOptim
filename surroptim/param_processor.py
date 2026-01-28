@@ -395,10 +395,19 @@ class ParameterProcessor:
         return self.physical_to_unit(x_or_X, clip=clip)
 
     def reference_to_physical(self, z_or_Z, *, clip=False):
-        """Map reference values in [-1, 1] back to physical parameter values.
+        """Map reference/unit values in [-1, 1] back to physical parameter values.
 
-        Raises ValueError if input is outside [-1,1] unless `clip=True` is used
-        on the upstream `physical_to_reference` call.
+        This is the canonical `reference_to_physical` API but delegates to the
+        `unit_to_physical` implementation (kept as the single copy of the logic)
+        to avoid code duplication.
+        """
+        return self.unit_to_physical(z_or_Z, clip=clip)
+
+    def unit_to_physical(self, z_or_Z, *, clip=False):
+        """Alias name kept for compatibility: unit/reference -> physical.
+
+        Contains the actual implementation; `reference_to_physical` delegates
+        to this to keep a single source of truth.
         """
         Z, is_batch = self._as_X(z_or_Z)
         X = np.zeros_like(Z)
