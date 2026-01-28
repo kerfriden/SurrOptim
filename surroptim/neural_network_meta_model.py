@@ -5,7 +5,7 @@ This module provides neural network-based metamodel regressors with single hidde
 """
 
 import numpy as np
-from typing import Optional, Callable
+from typing import Optional, Callable, Tuple
 from surroptim.meta_models import metamodel
 
 try:
@@ -114,6 +114,45 @@ class neural_net_regressor(metamodel):
         
         X_torch = torch.from_numpy(X).float()
         return self.model.forward(X_torch).detach().numpy()
+
+    def predict_and_grad(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Return predictions and input gradients using PyTorch autograd.
+
+        Returns
+        -------
+        y_np : np.ndarray
+            Model predictions, shape (n_samples, n_out)
+        grads_np : np.ndarray
+            Gradients d y / d x with shape (n_samples, n_out, n_in)
+        """
+        if self.model is None:
+            raise ValueError("Model not trained yet")
+
+        X_torch = torch.from_numpy(X).float().requires_grad_(True)
+        y_torch = self.model.forward(X_torch)
+
+        # Ensure 2D outputs (N, n_out)
+        if y_torch.dim() == 1:
+            y_torch = y_torch.unsqueeze(1)
+
+        N, n_out = y_torch.shape
+        n_in = X_torch.shape[1]
+
+        y_np = y_torch.detach().numpy()
+
+        grads = np.zeros((N, n_out, n_in), dtype=float)
+
+        for i in range(N):
+            for j in range(n_out):
+                grad_full = torch.autograd.grad(
+                    y_torch[i, j], X_torch, retain_graph=True, allow_unused=True
+                )[0]
+                if grad_full is None:
+                    grads[i, j, :] = 0.0
+                else:
+                    grads[i, j, :] = grad_full[i].detach().numpy()
+
+        return y_np, grads
 
 
 class neural_net_regressor_pt(metamodel):
