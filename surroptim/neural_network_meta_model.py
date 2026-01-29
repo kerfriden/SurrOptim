@@ -133,6 +133,12 @@ if _TORCH_AVAILABLE:
                 self.model = MLP(n_in=self.dim, n_hidden=self.n_hidden, n_out=self.n_out)
                 self.model.double()
 
+            # Ensure input tensors use the same dtype as the model (double)
+            if isinstance(X, torch.Tensor):
+                X = X.double()
+            if isinstance(y, torch.Tensor):
+                y = y.double()
+
             params = self.model.parameters()
             optimizer = torch.optim.Adam(params, lr=lr)
             loss_fn = torch.nn.MSELoss()

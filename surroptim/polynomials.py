@@ -8,6 +8,21 @@ def generate_multi_index(D: int, N: int):
     return [idx for idx in itertools.product(*ranges) if sum(idx) <= N]
 
 
+def generate_tensor_product_index(D: int, N: int):
+    """Generate tensor-product multi-indices in dimension D with orders 0..N.
+
+    Returns all combinations of orders (i1,...,iD) where each 0 <= ik <= N.
+    This produces the full tensor-product / full-factorial polynomial index set.
+    """
+    if D <= 0:
+        raise ValueError(f"Dimension must be positive, got {D}")
+    if N < 0:
+        raise ValueError(f"Order must be non-negative, got {N}")
+
+    ranges = [range(N + 1) for _ in range(D)]
+    return [idx for idx in itertools.product(*ranges)]
+
+
 def monomials(x: np.ndarray, order: int) -> np.ndarray:
     """Return x**order (elementwise)."""
     return np.asarray(x) ** order

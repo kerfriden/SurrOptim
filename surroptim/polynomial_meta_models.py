@@ -21,13 +21,15 @@ class polynomial_regressor(metamodel):
           `level` while emitting a `DeprecationWarning`.
     """
 
-    def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False):
+    def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False, tensor: bool = False):
         super().__init__()
         self.order = order
         self.level = level
         self.basis_generator = basis_generator or monomials
         self.coeff_reg = coeff_reg if coeff_reg is not None else 1.0e-10
         self.SG = SG
+        # If True, use full tensor-product multi-index (order per-dimension up to `order`)
+        self.tensor = tensor
         self.MI = None
         self.weights = None
 
@@ -50,7 +52,14 @@ class polynomial_regressor(metamodel):
             # generate_list_orders_dim expects the sparse-grid refinement level
             self.MI = generate_list_orders_dim(self.dim, self.level)
         else:
-            self.MI = generate_multi_index(self.dim, self.order)
+            if getattr(self, 'tensor', False):
+                # full tensor-product / full-factorial multi-index
+                from surroptim.polynomials import generate_tensor_product_index
+
+                self.MI = generate_tensor_product_index(self.dim, self.order)
+            else:
+                # total-order multi-index (default)
+                self.MI = generate_multi_index(self.dim, self.order)
         A = poly_basis_multi_index(X, self.basis_generator, self.MI)
         return A
 
@@ -63,8 +72,8 @@ class polynomial_regressor(metamodel):
 
 
 class polynomial_lasso_regressor(polynomial_regressor):
-    def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False, use_sklearn: bool = True):
-        super().__init__(order, level, basis_generator, coeff_reg, SG)
+    def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False, tensor: bool = False, use_sklearn: bool = True):
+        super().__init__(order, level, basis_generator, coeff_reg, SG, tensor)
         self.use_sklearn = use_sklearn
 
     def _lasso_fista(self, A, y, alpha=1e-3, max_iter=5000, tol=1e-6):
@@ -124,8 +133,8 @@ class polynomial_lasso_regressor(polynomial_regressor):
 
 
 class polynomial_ridge_regressor(polynomial_regressor):
-    def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False):
-        super().__init__(order, level, basis_generator, coeff_reg, SG)
+    def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False, tensor: bool = False):
+        super().__init__(order, level, basis_generator, coeff_reg, SG, tensor)
 
     def train(self, X=None, y=None):
         A = super().train_init(X, y)
