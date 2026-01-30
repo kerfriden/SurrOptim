@@ -415,9 +415,16 @@ class sampler_legacy_cls:
             try:
                 if self.active_keys is not None:
                     params_dict = {key: X[i, j] for j, key in enumerate(self.active_keys)}
-                    Y[i, :] = self.qoi_fn(params_dict)
+                    qval = self.qoi_fn(params_dict)
                 else:
-                    Y[i, :] = self.qoi_fn(X[i, :].reshape(1, -1))
+                    qval = self.qoi_fn(X[i, :].reshape(1, -1))
+                
+                # Auto-detect n_out on first sample if not set
+                if Y is None:
+                    self.n_out = np.max(np.asarray(qval).shape)
+                    Y = np.zeros((len(X), self.n_out))
+                
+                Y[i, :] = qval
             except TypeError as e:
                 if self.active_keys is not None:
                     raise TypeError(
@@ -451,8 +458,12 @@ class sampler_legacy_cls:
             self.Y = Y
         else:
             self.X_reference = np.concatenate((self.X_reference, X_reference), axis=0)
-            if Y is not None and self.Y is not None:
-                self.Y = np.concatenate((self.Y, Y), axis=0)
+            if Y is not None:
+                if self.Y is not None:
+                    self.Y = np.concatenate((self.Y, Y), axis=0)
+                else:
+                    # First time computing Y in additional samples mode
+                    self.Y = Y
 
     @property
     def y(self) -> Optional[np.ndarray]:
@@ -1070,7 +1081,14 @@ class sampler_cls:
                         parts.append(val)
                     Y[i, :] = np.concatenate(parts)
                 else:
-                    Y[i, :] = np.asarray(out).ravel()
+                    # Auto-detect n_out on first sample if not set
+                    if Y is None:
+                        out_arr = np.asarray(out).ravel()
+                        self.n_out = len(out_arr)
+                        Y = np.zeros((len(X), self.n_out))
+                        Y[i, :] = out_arr
+                    else:
+                        Y[i, :] = np.asarray(out).ravel()
             except TypeError:
                 raise
         return Y
@@ -1081,8 +1099,12 @@ class sampler_cls:
             self.Y = Y
         else:
             self.X_reference = np.concatenate((self.X_reference, X_reference), axis=0)
-            if Y is not None and self.Y is not None:
-                self.Y = np.concatenate((self.Y, Y), axis=0)
+            if Y is not None:
+                if self.Y is not None:
+                    self.Y = np.concatenate((self.Y, Y), axis=0)
+                else:
+                    # First time computing Y in additional samples mode
+                    self.Y = Y
 
     @property
     def y(self) -> Optional[np.ndarray]:
