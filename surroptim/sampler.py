@@ -123,7 +123,7 @@ class sampler_legacy_cls:
     def _resolve_level_for_sg(self, level: Optional[int], n_samples: Optional[int], N: Optional[int]) -> int:
         """Resolve refinement level for sparse grid DOE."""
         if level is None:
-            if n_samples is not None and N is None:
+            if n_samples is not None:
                 warnings.warn(
                     "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
                     DeprecationWarning,
@@ -222,8 +222,15 @@ class sampler_legacy_cls:
         Raises:
             ValueError: If DOE_type is invalid
         """
-        # Resolve n_samples parameter
-        n_samples = self._resolve_n_samples(n_samples, N, **kwargs)
+        # Handle sparse grid DOE first - it may use level instead of n_samples
+        is_sg = self._is_sparse_grid()
+        
+        if is_sg and level is not None:
+            # For SG with explicit level, we don't need n_samples
+            n_samples = None
+        else:
+            # Resolve n_samples parameter for non-SG or SG without explicit level
+            n_samples = self._resolve_n_samples(n_samples, N, **kwargs)
 
         if as_additional_points is not None:
             as_additional_samples = as_additional_points
@@ -231,11 +238,10 @@ class sampler_legacy_cls:
         if "as_additional_points" in kwargs and not as_additional_samples:
             as_additional_samples = kwargs.get("as_additional_points")
 
-        # Handle sparse grid DOE
-        is_sg = self._is_sparse_grid()
+        # Resolve level for sparse grid
         if is_sg:
             level = self._resolve_level_for_sg(level, n_samples, N)
-            n_samples = None  # Use level instead
+            n_samples = None  # Use level instead for SG
 
         if self.sampler_doe is None or not as_additional_samples:
             if self.sampler_doe is not None and not as_additional_samples:
@@ -528,7 +534,7 @@ class sampler_cls:
     def _resolve_level_for_sg(self, level: Optional[int], n_samples: Optional[int], N: Optional[int]) -> int:
         """Resolve refinement level for sparse grid DOE."""
         if level is None:
-            if n_samples is not None and N is None:
+            if n_samples is not None:
                 warnings.warn(
                     "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
                     DeprecationWarning,
@@ -731,8 +737,15 @@ class sampler_cls:
         batch_computation: bool = False,
         **kwargs,
     ) -> None:
-        # Resolve n_samples parameter
-        n_samples = self._resolve_n_samples(n_samples, N, **kwargs)
+        # Handle sparse grid DOE first - it may use level instead of n_samples
+        is_sg = self._is_sparse_grid()
+        
+        if is_sg and level is not None:
+            # For SG with explicit level, we don't need n_samples
+            n_samples = None
+        else:
+            # Resolve n_samples parameter for non-SG or SG without explicit level
+            n_samples = self._resolve_n_samples(n_samples, N, **kwargs)
 
         # Resolve add-to-dataset flag with backward-compatible aliases.
         # Precedence: explicit `as_additional_samples` if provided -> `add_to_dataset` -> `as_additional_points` kw
@@ -749,11 +762,10 @@ class sampler_cls:
                 else:
                     as_additional = bool(add_to_dataset)
 
-        # Handle sparse grid DOE
-        is_sg = self._is_sparse_grid()
+        # Resolve level for sparse grid
         if is_sg:
             level = self._resolve_level_for_sg(level, n_samples, N)
-            n_samples = None  # Use level instead
+            n_samples = None  # Use level instead for SG
 
         if self.sampler_doe is None or not as_additional:
             if self.sampler_doe is not None and not as_additional:
