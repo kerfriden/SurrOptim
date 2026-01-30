@@ -281,18 +281,18 @@ class sampler_legacy_cls:
         if self.sampler_doe is not None and not as_additional_samples and n_before > 0:
             # Reinitialization case
             print(
-                f"Start computing {n_new} samples in parametric dimension {len(self.bounds)} using {self.DOE_type} "
+                f"Start computing {n_new} samples in parametric dimension {len(self.bounds)} using {self.doe_type} "
                 f"(reinitializing, previous {n_before} samples will be replaced)"
             )
         elif n_before == 0:
             # First call case
             print(
-                f"Start computing {n_new} samples in parametric dimension {len(self.bounds)} using {self.DOE_type}"
+                f"Start computing {n_new} samples in parametric dimension {len(self.bounds)} using {self.doe_type}"
             )
         else:
             # Additional samples case
             print(
-                f"Start computing {n_new} additional samples in parametric dimension {len(self.bounds)} using {self.DOE_type} "
+                f"Start computing {n_new} additional samples in parametric dimension {len(self.bounds)} using {self.doe_type} "
                 f"({n_before} -> {n_after} total samples)"
             )
 
@@ -818,18 +818,18 @@ class sampler_cls:
         if self.sampler_doe is not None and not as_additional and n_before > 0:
             # Reinitialization case
             print(
-                f"Start computing {n_new} samples in parametric dimension {self.dim} using {self.DOE_type} "
+                f"Start computing {n_new} samples in parametric dimension {self.dim} using {self.doe_type} "
                 f"(reinitializing, previous {n_before} samples will be replaced)"
             )
         elif n_before == 0:
             # First call case
             print(
-                f"Start computing {n_new} samples in parametric dimension {self.dim} using {self.DOE_type}"
+                f"Start computing {n_new} samples in parametric dimension {self.dim} using {self.doe_type}"
             )
         else:
             # Additional samples case
             print(
-                f"Start computing {n_new} additional samples in parametric dimension {self.dim} using {self.DOE_type} "
+                f"Start computing {n_new} additional samples in parametric dimension {self.dim} using {self.doe_type} "
                 f"({n_before} -> {n_after} total samples)"
             )
 
