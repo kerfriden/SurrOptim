@@ -5,6 +5,32 @@ This module provides neural network-based metamodel regressors with a
 single-hidden-layer MLP architecture. Importing this module does not
 raise when PyTorch is absent; instead lightweight stubs are provided
 that raise helpful ImportError messages at use-time.
+
+PYTORCH INSTALLATION ON WINDOWS:
+---------------------------------
+If you get "ImportError: DLL load failed while importing _C", you need to:
+
+1. Install Microsoft Visual C++ Redistributable:
+   https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+2. Install PyTorch (choose one):
+   
+   Option A - CPU-only (simplest):
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+   
+   Option B - Use Conda (most reliable on Windows):
+   conda install -c pytorch pytorch cpuonly -y
+   
+   Option C - With CUDA for GPU:
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+3. Verify it works:
+   python -c "import torch; print('PyTorch', torch.__version__)"
+
+See DOCS/SURROPTIM_CHANGELOG_AND_PYTORCH_WINDOWS.md for detailed troubleshooting.
+
+Note: SurrOptim works fine WITHOUT PyTorch - you just can't use neural network metamodels.
+Other metamodels (GP, polynomial, k-NN) work without PyTorch.
 """
 
 import numpy as np
@@ -102,16 +128,25 @@ if _TORCH_AVAILABLE:
             n_in = X_torch.shape[1]
 
             y_np = y_torch.detach().numpy()
+            
+            # Efficient vectorized gradient computation using vmap or backward with grad_outputs
+            # Create unit vectors for each output dimension
             grads = np.zeros((N, n_out, n_in), dtype=float)
-
+            
+            # For each output dimension, compute gradients w.r.t. all inputs at once
             for j in range(n_out):
-                retain = j < (n_out - 1)
-                grad_full = torch.autograd.grad(
-                    y_torch[:, j].sum(), X_torch, retain_graph=retain, allow_unused=True
+                # Create gradient tensor with 1.0 for output j, 0.0 elsewhere
+                grad_outputs = torch.zeros_like(y_torch)
+                grad_outputs[:, j] = 1.0
+                
+                # Compute gradient for all samples at once
+                grad_input = torch.autograd.grad(
+                    y_torch, X_torch, grad_outputs=grad_outputs,
+                    retain_graph=(j < n_out - 1), allow_unused=True
                 )[0]
-                if grad_full is None:
-                    continue
-                grads[:, j, :] = grad_full.detach().cpu().numpy()
+                
+                if grad_input is not None:
+                    grads[:, j, :] = grad_input.detach().cpu().numpy()
 
             return y_np, grads
 

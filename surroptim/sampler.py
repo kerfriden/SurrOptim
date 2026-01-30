@@ -69,29 +69,25 @@ class sampler_legacy_cls:
         self.bounds = bounds
         self.active_keys = active_keys
         # Backward-compatible alias: prefer `qoi_fn`, fall back to legacy `compute_QoIs`
-        if qoi_fn is None and compute_QoIs is not None:
-            qoi_fn = compute_QoIs
-        self.qoi_fn = qoi_fn
-        # expose legacy name for external callers expecting it
-        self.compute_QoIs = self.qoi_fn
+        self.qoi_fn = qoi_fn if qoi_fn is not None else compute_QoIs
+        self.compute_QoIs = self.qoi_fn  # expose legacy name
         self.seed = int(seed) if seed is not None else None
         self.plot_solution = plot_solution
         self.n_out = n_out
         # backward compatibility: accept DOE_type as legacy keyword
-        self.doe_type = DOE_type if DOE_type is not None else doe_type
-        # backward-compatible attribute name
-        self.DOE_type = self.doe_type
+        self.doe_type = DOE_type or doe_type
+        self.DOE_type = self.doe_type  # backward-compatible attribute name
 
         # Create distribution strategy instances
         self.distribution_strategies = [DistributionFactory.create(t) for t in distributions]
 
         # Print initialization info
         print("Building your FEA sampler...")
-        for i in range(len(self.bounds)):
+        for i, (dist_type, bound) in enumerate(zip(self.distributions, self.bounds)):
             if self.active_keys is not None:
                 print(f"parameter dimension {i}: {self.active_keys[i]}")
-            print(f"distribution type for dimension {i}: {self.distributions[i]}")
-            print(f"bounds of distribution for dimension {i}: {self.bounds[i]}")
+            print(f"distribution type for dimension {i}: {dist_type}")
+            print(f"bounds of distribution for dimension {i}: {bound}")
 
         # Auto-detect n_out if not provided
         if n_out is None and qoi_fn is not None:
@@ -106,6 +102,42 @@ class sampler_legacy_cls:
         self.sampler_doe: Optional[object] = None
 
         print("... done building")
+
+    def _is_sparse_grid(self) -> bool:
+        """Check if current DOE type is sparse grid (SG)."""
+        return (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
+            getattr(self, 'DOE_type', None) is not None and str(self.DOE_type).upper() == 'SG'
+        )
+
+    def _resolve_n_samples(self, n_samples: Optional[int], N: Optional[int], **kwargs) -> int:
+        """Resolve n_samples from multiple parameter sources."""
+        if n_samples is None:
+            if N is None:
+                n_samples = kwargs.get("n_samples", None) or kwargs.get("N", None)
+                if n_samples is None:
+                    raise ValueError("n_samples (or legacy N) must be provided")
+            else:
+                n_samples = N
+        return n_samples
+
+    def _resolve_level_for_sg(self, level: Optional[int], n_samples: Optional[int], N: Optional[int]) -> int:
+        """Resolve refinement level for sparse grid DOE."""
+        if level is None:
+            if n_samples is not None and N is None:
+                warnings.warn(
+                    "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                    DeprecationWarning,
+                )
+                level = int(n_samples)
+            elif N is not None:
+                warnings.warn(
+                    "Passing `N` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                    DeprecationWarning,
+                )
+                level = int(N)
+            else:
+                raise ValueError("doe_type='SG' requires `level` to be specified")
+        return level
 
     @property
     def X(self) -> Optional[np.ndarray]:
@@ -139,7 +171,7 @@ class sampler_legacy_cls:
         X = self._get_center_point()
 
         if self.active_keys is not None:
-            params_dict = {self.active_keys[i]: X[0, i] for i in range(len(self.active_keys))}
+            params_dict = {key: X[0, i] for i, key in enumerate(self.active_keys)}
             qval = self.qoi_fn(params_dict)
         else:
             qval = self.qoi_fn(X)
@@ -151,9 +183,7 @@ class sampler_legacy_cls:
         """Get center point in physical space based on distribution types."""
         X = np.zeros((1, len(self.bounds)))
 
-        for i in range(len(self.bounds)):
-            dist_type = self.distributions[i]
-            param = self.bounds[i]
+        for i, (dist_type, param) in enumerate(zip(self.distributions, self.bounds)):
 
             if dist_type == 'uniform':
                 X[0, i] = (param[0] + param[1]) / 2
@@ -192,17 +222,8 @@ class sampler_legacy_cls:
         Raises:
             ValueError: If DOE_type is invalid
         """
-        # Setup DOE strategy
-        # resolve backward-compatible args and accept legacy kwargs
-        if n_samples is None:
-            # prefer explicit N if provided
-            if N is None:
-                # accept legacy kw in **kwargs
-                n_samples = kwargs.get("n_samples", None) or kwargs.get("N", None)
-                if n_samples is None:
-                    raise ValueError("n_samples (or legacy N) must be provided")
-            else:
-                n_samples = N
+        # Resolve n_samples parameter
+        n_samples = self._resolve_n_samples(n_samples, N, **kwargs)
 
         if as_additional_points is not None:
             as_additional_samples = as_additional_points
@@ -210,33 +231,11 @@ class sampler_legacy_cls:
         if "as_additional_points" in kwargs and not as_additional_samples:
             as_additional_samples = kwargs.get("as_additional_points")
 
-        # If using sparse-grid DOE, prefer explicit `level` to avoid
-        # confusing `n_samples` semantics (n_samples -> number of samples
-        # for PRS/LHS/QRS, but represents refinement level for SG).
-        is_sg = (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
-            getattr(self, 'DOE_type', None) is not None and str(self.DOE_type).upper() == 'SG'
-        )
-
+        # Handle sparse grid DOE
+        is_sg = self._is_sparse_grid()
         if is_sg:
-            # Resolve level: explicit `level` -> use it; else fall back to n_samples/N with deprecation warning
-            if level is None:
-                # If caller passed N but not level, accept but warn
-                if n_samples is not None and N is None:
-                    warnings.warn(
-                        "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
-                        DeprecationWarning,
-                    )
-                    level = int(n_samples)
-                    n_samples = None
-                elif N is not None and n_samples is None:
-                    warnings.warn(
-                        "Passing `N` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
-                        DeprecationWarning,
-                    )
-                    level = int(N)
-                else:
-                    # neither provided -> error
-                    raise ValueError("doe_type='SG' requires `level` to be specified")
+            level = self._resolve_level_for_sg(level, n_samples, N)
+            n_samples = None  # Use level instead
 
         if self.sampler_doe is None or not as_additional_samples:
             if self.sampler_doe is not None and not as_additional_samples:
@@ -286,27 +285,83 @@ class sampler_legacy_cls:
 
     def _reference_to_physical_samples(self, X_reference: np.ndarray) -> np.ndarray:
         """Transform samples from reference space [-1,1]^n to physical space."""
-        X = np.zeros_like(X_reference)
-
-        for j in range(len(self.bounds)):
-            X[:, j] = self.distribution_strategies[j].denormalise(X_reference[:, j], self.bounds[j])
-        return X
+        return self._transform_samples(X_reference, lambda j, vals: self.distribution_strategies[j].denormalise(vals, self.bounds[j]))
 
     def _physical_to_reference_samples(self, X: np.ndarray) -> np.ndarray:
         """Transform samples from physical space to reference [-1,1]^n."""
-        Z = np.zeros_like(X)
-        for j in range(len(self.bounds)):
-            Z[:, j] = self.distribution_strategies[j].normalise(X[:, j], self.bounds[j])
-        return Z
+        return self._transform_samples(X, lambda j, vals: self.distribution_strategies[j].normalise(vals, self.bounds[j]))
 
-    # Backwards-compatible aliases matching the newer sampler API
+    def _transform_samples(self, X: np.ndarray, transform_fn: Callable) -> np.ndarray:
+        """Apply transformation function to each dimension of samples."""
+        result = np.zeros_like(X)
+        for j in range(len(self.bounds)):
+            result[:, j] = transform_fn(j, X[:, j])
+        return result
+
+    # ========================================================================
+    # CANONICAL COORDINATE TRANSFORMATION METHODS
+    # Convention: phys_to_unit, unit_to_phys (reference/unit are equivalent)
+    # All other names are aliases for backward compatibility
+    # ========================================================================
+
+    def phys_to_unit(self, x_or_X, *, clip=False):
+        """Convert from physical space to unit/reference space [-1, 1].
+        
+        This is the canonical method. Aliases: physical_to_reference, phys_to_reference.
+        """
+        x = np.atleast_1d(x_or_X)
+        is_1d = (x_or_X.ndim == 0 or (isinstance(x_or_X, np.ndarray) and x_or_X.ndim == 1))
+        
+        if is_1d:
+            x = x.reshape(1, -1)
+        
+        result = self._transform_samples(x, lambda j, vals: self.distribution_strategies[j].normalise(vals, self.bounds[j]))
+        
+        if is_1d:
+            return result[0]
+        return result
+
+    def unit_to_phys(self, z_or_Z, *, clip=False):
+        """Convert from unit/reference space [-1, 1] to physical space.
+        
+        This is the canonical method. Aliases: reference_to_physical, unit_to_physical.
+        """
+        z = np.atleast_1d(z_or_Z)
+        is_1d = (z_or_Z.ndim == 0 or (isinstance(z_or_Z, np.ndarray) and z_or_Z.ndim == 1))
+        
+        if is_1d:
+            z = z.reshape(1, -1)
+        
+        result = self._transform_samples(z, lambda j, vals: self.distribution_strategies[j].denormalise(vals, self.bounds[j]))
+        
+        if is_1d:
+            return result[0]
+        return result
+
+    # ========================================================================
+    # BACKWARD-COMPATIBLE ALIASES
+    # These all delegate to the canonical methods above
+    # ========================================================================
+
     def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
-        """Compatibility wrapper for older name `_physical_to_reference_samples`."""
-        return self._physical_to_reference_samples(X)
+        """Alias for phys_to_unit."""
+        return self.phys_to_unit(X)
 
     def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
-        """Compatibility wrapper for older name `_reference_to_physical_samples`."""
-        return self._reference_to_physical_samples(X_reference)
+        """Alias for unit_to_phys."""
+        return self.unit_to_phys(X_reference)
+
+    def phys_to_reference(self, x_or_X, *, clip=False):
+        """Alias for phys_to_unit."""
+        return self.phys_to_unit(x_or_X, clip=clip)
+
+    def reference_to_phys(self, z_or_Z, *, clip=False):
+        """Alias for unit_to_phys."""
+        return self.unit_to_phys(z_or_Z, clip=clip)
+
+    def unit_to_physical(self, z_or_Z, *, clip=False):
+        """Alias for unit_to_phys."""
+        return self.unit_to_phys(z_or_Z, clip=clip)
 
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         """Evaluate all samples at once."""
@@ -335,7 +390,7 @@ class sampler_legacy_cls:
         for i in range(len(X)):
             try:
                 if self.active_keys is not None:
-                    params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
+                    params_dict = {key: X[i, j] for j, key in enumerate(self.active_keys)}
                     Y[i, :] = self.qoi_fn(params_dict)
                 else:
                     Y[i, :] = self.qoi_fn(X[i, :].reshape(1, -1))
@@ -416,11 +471,8 @@ class sampler_cls:
         # constructor args that override any attributes on the params object.
         self.params = params
         # Backward-compatible alias: prefer `qoi_fn`, fall back to legacy `compute_QoIs`
-        if qoi_fn is None and compute_QoIs is not None:
-            qoi_fn = compute_QoIs
-        self.qoi_fn = qoi_fn
-        # expose legacy name for external callers expecting it
-        self.compute_QoIs = self.qoi_fn
+        self.qoi_fn = qoi_fn if qoi_fn is not None else compute_QoIs
+        self.compute_QoIs = self.qoi_fn  # expose legacy name
         self.active_keys = active_keys if active_keys is not None else getattr(params, "active_keys", None)
         self.seed = int(seed) if seed is not None else None
         # If False (default), expand packed representations to the full base
@@ -431,9 +483,8 @@ class sampler_cls:
         # n_out is not stored on params; detect from the provided `qoi_fn` when needed
         self.n_out = None
         # backward compatibility for constructor kwarg
-        # backward-compatible attribute name
-        self.doe_type = DOE_type if DOE_type is not None else doe_type
-        self.DOE_type = self.doe_type
+        self.doe_type = DOE_type or doe_type
+        self.DOE_type = self.doe_type  # backward-compatible attribute name
 
         # Use the parameter processor's dimension
         self.dim = int(self.params.dim)
@@ -457,11 +508,47 @@ class sampler_cls:
 
         print("... done building sampler_new_cls")
 
+    def _is_sparse_grid(self) -> bool:
+        """Check if current DOE type is sparse grid (SG)."""
+        return (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
+            getattr(self, 'DOE_type', None) is not None and str(self.DOE_type).upper() == 'SG'
+        )
+
+    def _resolve_n_samples(self, n_samples: Optional[int], N: Optional[int], **kwargs) -> int:
+        """Resolve n_samples from multiple parameter sources."""
+        if n_samples is None:
+            if N is None:
+                n_samples = kwargs.get('n_samples') or kwargs.get('N')
+                if n_samples is None:
+                    raise ValueError("n_samples (or legacy N) must be provided")
+            else:
+                n_samples = N
+        return n_samples
+
+    def _resolve_level_for_sg(self, level: Optional[int], n_samples: Optional[int], N: Optional[int]) -> int:
+        """Resolve refinement level for sparse grid DOE."""
+        if level is None:
+            if n_samples is not None and N is None:
+                warnings.warn(
+                    "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                    DeprecationWarning,
+                )
+                level = int(n_samples)
+            elif N is not None:
+                warnings.warn(
+                    "Passing `N` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
+                    DeprecationWarning,
+                )
+                level = int(N)
+            else:
+                raise ValueError("doe_type='SG' requires `level` to be specified")
+        return level
+
     @property
     def X(self) -> Optional[np.ndarray]:
         if self.X_reference is None:
             return None
-        return self.reference_to_physical(self.X_reference)
+        return self.unit_to_phys(self.X_reference)
 
     @property
     def x(self) -> Optional[np.ndarray]:
@@ -611,23 +698,24 @@ class sampler_cls:
             return packed
 
         a = np.asarray(packed)
-        if a.ndim == 1:
-            full = base_arr.copy()
-            for it in getattr(self.params, "_layout", []):
-                if it.get("param") == "__arr":
-                    sl = it["sl"]
-                    mask = it["mask"]
-                    full[mask] = a[sl]
-            return full
-
-        # a.ndim == 2
+        is_1d = (a.ndim == 1)
+        
+        # Normalize to 2D for uniform processing
+        if is_1d:
+            a = a.reshape(1, -1)
+        
+        # Create output array: replicate base array for each sample
         full = np.tile(base_arr[None, :], (a.shape[0], 1))
+        
+        # Apply transformations from layout
         for it in getattr(self.params, "_layout", []):
             if it.get("param") == "__arr":
                 sl = it["sl"]
                 mask = it["mask"]
                 full[:, mask] = a[:, sl]
-        return full
+        
+        # Return in original dimensionality
+        return full[0] if is_1d else full
 
     
 
@@ -643,15 +731,8 @@ class sampler_cls:
         batch_computation: bool = False,
         **kwargs,
     ) -> None:
-        # resolve backward-compatible args: prefer `n_samples`, accept `N` as alias
-        if n_samples is None:
-            if N is None:
-                # accept legacy names passed via kwargs
-                n_samples = kwargs.get('n_samples') or kwargs.get('N')
-                if n_samples is None:
-                    raise ValueError("n_samples (or legacy N) must be provided")
-            else:
-                n_samples = N
+        # Resolve n_samples parameter
+        n_samples = self._resolve_n_samples(n_samples, N, **kwargs)
 
         # Resolve add-to-dataset flag with backward-compatible aliases.
         # Precedence: explicit `as_additional_samples` if provided -> `add_to_dataset` -> `as_additional_points` kw
@@ -668,28 +749,11 @@ class sampler_cls:
                 else:
                     as_additional = bool(add_to_dataset)
 
-        # Special handling for sparse-grid DOE: `level` is the refinement level
-        is_sg = (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
-            getattr(self, 'DOE_type', None) is not None and str(self.DOE_type).upper() == 'SG'
-        )
-
+        # Handle sparse grid DOE
+        is_sg = self._is_sparse_grid()
         if is_sg:
-            if level is None:
-                if n_samples is not None and N is None:
-                    warnings.warn(
-                        "Passing `n_samples` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
-                        DeprecationWarning,
-                    )
-                    level = int(n_samples)
-                    n_samples = None
-                elif N is not None and n_samples is None:
-                    warnings.warn(
-                        "Passing `N` as sparse-grid refinement level is deprecated; use `level=` when doe_type='SG'.",
-                        DeprecationWarning,
-                    )
-                    level = int(N)
-                else:
-                    raise ValueError("doe_type='SG' requires `level` to be specified")
+            level = self._resolve_level_for_sg(level, n_samples, N)
+            n_samples = None  # Use level instead
 
         if self.sampler_doe is None or not as_additional:
             if self.sampler_doe is not None and not as_additional:
@@ -709,7 +773,7 @@ class sampler_cls:
                 X_reference = self.sampler_doe.sample(n_samples, as_additional_samples=True)
 
         # Convert reference -> physical using params processor
-        X = self.reference_to_physical(X_reference)
+        X = self.unit_to_phys(X_reference)
 
         if self.n_out is not None:
             Y = np.zeros((len(X_reference), self.n_out))
@@ -730,72 +794,116 @@ class sampler_cls:
 
         self._store_results(X_reference, X, Y, as_additional_points if as_additional_points is not None else as_additional)
 
-    def reference_to_physical(self, X_reference: np.ndarray) -> np.ndarray:
-        """Use params.processor to convert reference to physical."""
-        return self.params.reference_to_physical(X_reference)
+    # ========================================================================
+    # CANONICAL COORDINATE TRANSFORMATION METHODS
+    # Convention: phys_to_unit, unit_to_gauss, gauss_to_unit, unit_to_phys
+    # All other names are aliases for backward compatibility
+    # ========================================================================
 
-    def physical_to_reference(self, X: np.ndarray) -> np.ndarray:
-        """Use params.processor to convert physical to reference."""
-        return self.params.physical_to_reference(X)
+    def phys_to_unit(self, x_or_X, *, clip=False):
+        """Convert from physical space to unit/reference space [-1, 1].
+        
+        This is the canonical method. Aliases: physical_to_reference, phys_to_reference.
+        """
+        if hasattr(self.params, "physical_to_reference"):
+            return self.params.physical_to_reference(x_or_X, clip=clip)
+        if hasattr(self.params, "phys_to_unit"):
+            return self.params.phys_to_unit(x_or_X, clip=clip)
+        raise AttributeError("params processor has no method 'physical_to_reference' or 'phys_to_unit'")
 
-    # Delegate gaussian/reference conversion helpers to the params processor
+    def unit_to_phys(self, z_or_Z, *, clip=False):
+        """Convert from unit/reference space [-1, 1] to physical space.
+        
+        This is the canonical method. Aliases: reference_to_physical, unit_to_physical.
+        """
+        if hasattr(self.params, "reference_to_physical"):
+            return self.params.reference_to_physical(z_or_Z, clip=clip)
+        if hasattr(self.params, "unit_to_physical"):
+            return self.params.unit_to_physical(z_or_Z, clip=clip)
+        raise AttributeError("params processor has no method 'reference_to_physical' or 'unit_to_physical'")
+
     def unit_to_gauss(self, z_or_Z, *, eps=None):
+        """Convert from unit/reference space [-1, 1] to Gaussian space.
+        
+        This is the canonical method. Alias: reference_to_gaussian.
+        """
         if hasattr(self.params, "unit_to_gauss"):
             return self.params.unit_to_gauss(z_or_Z, eps=eps) if eps is not None else self.params.unit_to_gauss(z_or_Z)
         raise AttributeError("params processor has no method 'unit_to_gauss'")
 
     def gauss_to_unit(self, g_or_G):
+        """Convert from Gaussian space to unit/reference space [-1, 1].
+        
+        This is the canonical method. Alias: gaussian_to_reference.
+        """
         if hasattr(self.params, "gauss_to_unit"):
             return self.params.gauss_to_unit(g_or_G)
         raise AttributeError("params processor has no method 'gauss_to_unit'")
 
-    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+    def phys_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        """Convert from physical space to Gaussian space.
+        
+        Composed from phys_to_unit and unit_to_gauss.
+        Alias: physical_to_gauss, physical_to_gaussian.
+        """
         if hasattr(self.params, "physical_to_gauss"):
             return self.params.physical_to_gauss(x_or_X, clip=clip, eps=eps)
-        # fallback: compose operations if available
-        if hasattr(self.params, "physical_to_reference") and hasattr(self.params, "unit_to_gauss"):
-            Z = self.params.physical_to_reference(x_or_X, clip=clip)
-            return self.params.unit_to_gauss(Z, eps=eps)
-        raise AttributeError("params processor has no method 'physical_to_gauss' or equivalent composition")
+        # Compose: physical -> unit -> gauss
+        z = self.phys_to_unit(x_or_X, clip=clip)
+        return self.unit_to_gauss(z, eps=eps)
 
-    def gauss_to_physical(self, g_or_G, *, clip=False):
+    def gauss_to_phys(self, g_or_G, *, clip=False):
+        """Convert from Gaussian space to physical space.
+        
+        Composed from gauss_to_unit and unit_to_phys.
+        Alias: gauss_to_physical, gaussian_to_physical.
+        """
         if hasattr(self.params, "gauss_to_physical"):
             return self.params.gauss_to_physical(g_or_G, clip=clip)
-        if hasattr(self.params, "gauss_to_unit") and hasattr(self.params, "reference_to_physical"):
-            Z = self.params.gauss_to_unit(g_or_G)
-            return self.params.reference_to_physical(Z, clip=clip)
-        raise AttributeError("params processor has no method 'gauss_to_physical' or equivalent composition")
+        # Compose: gauss -> unit -> physical
+        z = self.gauss_to_unit(g_or_G)
+        return self.unit_to_phys(z, clip=clip)
 
-    # Backwards-compatible aliases
-    def gaussian_to_physical(self, g_or_G, *, clip=False):
-        return self.gauss_to_physical(g_or_G, clip=clip)
+    # ========================================================================
+    # BACKWARD-COMPATIBLE ALIASES
+    # These all delegate to the canonical methods above
+    # ========================================================================
 
-    def gaussian_to_reference(self, g_or_G):
-        return self.gauss_to_unit(g_or_G)
+    def physical_to_reference(self, X: np.ndarray, *, clip=False) -> np.ndarray:
+        """Alias for phys_to_unit."""
+        return self.phys_to_unit(X, clip=clip)
 
-    # --- Compatibility short-name aliases for unit <-> physical conversions ---
-    def unit_to_physical(self, z_or_Z, *, clip=False):
-        """Delegate unit/reference -> physical to the params processor.
-
-        Prefer `params.unit_to_physical`, fall back to `params.reference_to_physical`.
-        """
-        if hasattr(self.params, "unit_to_physical"):
-            return self.params.unit_to_physical(z_or_Z, clip=clip)
-        if hasattr(self.params, "reference_to_physical"):
-            return self.params.reference_to_physical(z_or_Z, clip=clip)
-        raise AttributeError("params processor has no method 'unit_to_physical' or 'reference_to_physical'")
-
-    def unit_to_phys(self, z_or_Z, *, clip=False):
-        """Canonical short-name alias for `unit_to_physical`."""
-        return self.unit_to_physical(z_or_Z, clip=clip)
-
-    def reference_to_phys(self, z_or_Z, *, clip=False):
-        """Alias for `reference_to_physical` (short name)."""
-        return self.reference_to_physical(z_or_Z, clip=clip)
+    def reference_to_physical(self, X_reference: np.ndarray, *, clip=False) -> np.ndarray:
+        """Alias for unit_to_phys."""
+        return self.unit_to_phys(X_reference, clip=clip)
 
     def phys_to_reference(self, x_or_X, *, clip=False):
-        """Alias for `physical_to_reference` (short name)."""
-        return self.physical_to_reference(x_or_X, clip=clip)
+        """Alias for phys_to_unit."""
+        return self.phys_to_unit(x_or_X, clip=clip)
+
+    def reference_to_phys(self, z_or_Z, *, clip=False):
+        """Alias for unit_to_phys."""
+        return self.unit_to_phys(z_or_Z, clip=clip)
+
+    def unit_to_physical(self, z_or_Z, *, clip=False):
+        """Alias for unit_to_phys."""
+        return self.unit_to_phys(z_or_Z, clip=clip)
+
+    def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        """Alias for phys_to_gauss."""
+        return self.phys_to_gauss(x_or_X, clip=clip, eps=eps)
+
+    def gauss_to_physical(self, g_or_G, *, clip=False):
+        """Alias for gauss_to_phys."""
+        return self.gauss_to_phys(g_or_G, clip=clip)
+
+    def gaussian_to_physical(self, g_or_G, *, clip=False):
+        """Alias for gauss_to_phys."""
+        return self.gauss_to_phys(g_or_G, clip=clip)
+
+    def gaussian_to_reference(self, g_or_G):
+        """Alias for gauss_to_unit."""
+        return self.gauss_to_unit(g_or_G)
 
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         if self.qoi_fn is None:
@@ -872,7 +980,7 @@ class sampler_cls:
         for i in range(len(X)):
             try:
                 if self.active_keys is not None:
-                    params_dict = {self.active_keys[j]: X[i, j] for j in range(len(self.active_keys))}
+                    params_dict = {key: X[i, j] for j, key in enumerate(self.active_keys)}
                     out = self.qoi_fn(params_dict)
                 elif hasattr(self.params, 'unpack'):
                     unpacked = self.params.unpack(X[i])
@@ -935,30 +1043,38 @@ class sampler_cls:
 sampler_new_cls = sampler_cls
 sampler_old_cls = sampler_legacy_cls
 
+# Store reference to the actual class before it gets shadowed
+_sampler_cls_class = sampler_cls
+_sampler_legacy_cls_class = sampler_legacy_cls
+
 
 def sampler_cls(*args, **kwargs):
-    """Compatibility factory for sampler classes.
+    """Smart factory for sampler classes.
 
     Behavior:
     - If caller passes a `params=` keyword (or first positional arg looks
       like a params processor), construct and return the params-based
-      `sampler_new_cls` instance.
+      `sampler_cls` instance.
     - Otherwise, construct and return the legacy `sampler_legacy_cls`.
 
-    This preserves older callsites that do `sampler = sampler_cls(distributions=..., bounds=...)`
+    This preserves older callsites that do `sampler_cls(distributions=..., bounds=...)`
     while allowing new code to call `sampler_cls(params=P, ...)`.
     """
     # If explicit 'params' kw is provided, prefer new params-based sampler
     if 'params' in kwargs:
-        return sampler_new_cls(*args, **kwargs)
+        return _sampler_cls_class(*args, **kwargs)
 
     # If first positional arg looks like a params processor, prefer new sampler
     if len(args) >= 1:
         first = args[0]
         # Heuristic: params processors expose 'pack' and 'reference_to_physical' or 'dim'
         if hasattr(first, 'pack') or hasattr(first, 'reference_to_physical') or hasattr(first, 'dim'):
-            return sampler_new_cls(*args, **kwargs)
+            return _sampler_cls_class(*args, **kwargs)
 
     # Fallback to legacy sampler for distributions/bounds style
-    return sampler_legacy_cls(*args, **kwargs)
+    return _sampler_legacy_cls_class(*args, **kwargs)
+
+
+# Convenience alias - also export sampler as the factory
+sampler = sampler_cls
     
