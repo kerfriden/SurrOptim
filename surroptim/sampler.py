@@ -204,7 +204,7 @@ class sampler_legacy_cls:
         n_samples: Optional[int] = None,
         N: Optional[int] = None,
         level: Optional[int] = None,
-        as_additional_samples: bool = False,
+        as_additional_samples: bool = True,
         as_additional_points: Optional[bool] = None,
         plot: bool = False,
         sample_in_batch: bool = False,
