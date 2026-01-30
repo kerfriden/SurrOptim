@@ -273,10 +273,28 @@ class sampler_legacy_cls:
         else:
             Y = None
 
-        sample_type = "additional samples" if as_additional_samples and self.X_reference is not None else "samples"
-        print(
-            f"Start computing {len(X_reference)} {sample_type} in parametric dimension {len(self.bounds)} using {self.DOE_type}"
-        )
+        # Build informative sampling message
+        n_before = len(self.X_reference) if self.X_reference is not None else 0
+        n_new = len(X_reference)
+        n_after = n_before + n_new
+        
+        if self.sampler_doe is not None and not as_additional_samples and n_before > 0:
+            # Reinitialization case
+            print(
+                f"Start computing {n_new} samples in parametric dimension {len(self.bounds)} using {self.DOE_type} "
+                f"(reinitializing, previous {n_before} samples will be replaced)"
+            )
+        elif n_before == 0:
+            # First call case
+            print(
+                f"Start computing {n_new} samples in parametric dimension {len(self.bounds)} using {self.DOE_type}"
+            )
+        else:
+            # Additional samples case
+            print(
+                f"Start computing {n_new} additional samples in parametric dimension {len(self.bounds)} using {self.DOE_type} "
+                f"({n_before} -> {n_after} total samples)"
+            )
 
         # Evaluate samples
         if sample_in_batch and self.qoi_fn is not None:
@@ -792,8 +810,28 @@ class sampler_cls:
         else:
             Y = None
 
-        sample_type = "additional samples" if as_additional and self.X_reference is not None else "samples"
-        print(f"Start computing {len(X_reference)} {sample_type} in parametric dimension {self.dim} using {self.DOE_type}")
+        # Build informative sampling message
+        n_before = len(self.X_reference) if self.X_reference is not None else 0
+        n_new = len(X_reference)
+        n_after = n_before + n_new
+        
+        if self.sampler_doe is not None and not as_additional and n_before > 0:
+            # Reinitialization case
+            print(
+                f"Start computing {n_new} samples in parametric dimension {self.dim} using {self.DOE_type} "
+                f"(reinitializing, previous {n_before} samples will be replaced)"
+            )
+        elif n_before == 0:
+            # First call case
+            print(
+                f"Start computing {n_new} samples in parametric dimension {self.dim} using {self.DOE_type}"
+            )
+        else:
+            # Additional samples case
+            print(
+                f"Start computing {n_new} additional samples in parametric dimension {self.dim} using {self.DOE_type} "
+                f"({n_before} -> {n_after} total samples)"
+            )
 
         # Decide batch vs sequential based on params processor mode and caller preference
         can_batch = getattr(self.params, "_mode", None) == "array"
