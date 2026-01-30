@@ -286,8 +286,8 @@ class sampler_legacy_cls:
 
         print("... done sampling")
 
-        # Store results
-        self._store_results(X_reference, X, Y, as_additional_points)
+        # Store results - use the resolved as_additional_samples value
+        self._store_results(X_reference, X, Y, as_additional_samples)
 
     def _reference_to_physical_samples(self, X_reference: np.ndarray) -> np.ndarray:
         """Transform samples from reference space [-1,1]^n to physical space."""

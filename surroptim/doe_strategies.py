@@ -189,15 +189,32 @@ class SGStrategy(DOEStrategy):
 
         if as_additional_samples and self.X is not None:
             # Find points in X not already in self.X
+            prev_level = getattr(self, '_current_level', None)
+            prev_count = len(self.X)
+            
             mask = np.isin(
                 X.view([('', X.dtype)] * X.shape[1]),
                 self.X.view([('', self.X.dtype)] * self.X.shape[1])
             )
             X_new = X[~mask.any(axis=1)]
+            new_count = len(X_new)
+            total_count = len(X)
+            
+            # Report hierarchical refinement
+            if prev_level is not None:
+                print(f"Sparse Grid hierarchical refinement: level {prev_level} -> {n_samples}")
+            else:
+                print(f"Sparse Grid hierarchical refinement to level {n_samples}")
+            print(f"  Previous points: {prev_count}")
+            print(f"  New points: {new_count} (out of {total_count} total at level {n_samples})")
+            print(f"  Total points after refinement: {prev_count + new_count}")
+            
             self.X = np.concatenate((self.X, X_new), axis=0)
+            self._current_level = n_samples
             return X_new
         else:
             self.X = X
+            self._current_level = n_samples
             return X
 
 
