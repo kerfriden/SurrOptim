@@ -792,6 +792,11 @@ class sampler_cls:
         batch_computation: bool = False,
         **kwargs,
     ) -> None:
+        # Backward-compatible alias: some older callsites used `sample_in_batch`
+        # to request batched QoI evaluation.
+        if "sample_in_batch" in kwargs:
+            batch_computation = bool(kwargs.get("sample_in_batch"))
+
         # Handle sparse grid DOE first - it may use level instead of n_samples
         is_sg = self._is_sparse_grid()
         
