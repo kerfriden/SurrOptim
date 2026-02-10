@@ -73,7 +73,12 @@ class sampler_legacy_cls:
         self.compute_QoIs = self.qoi_fn  # expose legacy name
         self.seed = int(seed) if seed is not None else None
         self.plot_solution = plot_solution
-        self.n_out = n_out
+        if n_out is not None:
+            warnings.warn(
+                "`n_out` is deprecated and ignored; QoI output size is auto-detected.",
+                DeprecationWarning,
+            )
+        self.n_out = None
         # backward compatibility: accept DOE_type as legacy keyword
         self.doe_type = DOE_type or doe_type
         self.DOE_type = self.doe_type  # backward-compatible attribute name
@@ -89,11 +94,9 @@ class sampler_legacy_cls:
             print(f"distribution type for dimension {i}: {dist_type}")
             print(f"bounds of distribution for dimension {i}: {bound}")
 
-        # Auto-detect n_out if not provided
-        if n_out is None and qoi_fn is not None:
+        # Always auto-detect n_out when a QoI function is available
+        if self.qoi_fn is not None:
             self._detect_n_out()
-
-        if qoi_fn is not None:
             print(f"n_out: {self.n_out}")
 
         # Storage for samples (X is computed on-demand from X_reference)
@@ -177,7 +180,12 @@ class sampler_legacy_cls:
             qval = self.qoi_fn(X)
 
         print(f"QoIs at test point: {qval}")
-        self.n_out = np.max(np.asarray(qval).shape)
+        arr = np.asarray(qval)
+        # Scalar QoI -> one output
+        if arr.ndim == 0:
+            self.n_out = 1
+        else:
+            self.n_out = int(np.max(arr.shape))
 
     def _get_center_point(self) -> np.ndarray:
         """Get center point in physical space based on distribution types."""
@@ -970,6 +978,65 @@ class sampler_cls:
         if self.qoi_fn is None:
             return None
 
+        def _normalize_batched_array(out, m_expected: int) -> np.ndarray:
+            """Normalize QoI output for batch evaluation.
+
+            Ensures a 2D array of shape (m_expected, n_out).
+            Accepts common QoI return shapes:
+            - (m_expected,) -> (m_expected, 1)
+            - (m_expected, 1) -> (m_expected, 1)
+            - (1, m_expected) with n_out==1 -> (m_expected, 1)
+            - (m_expected, k, ...) -> (m_expected, k*...)
+            - (k,) when m_expected==1 -> (1, k)
+            """
+            arr = np.asarray(out)
+            if arr.ndim == 0:
+                raise ValueError(
+                    "Batch QoI returned a scalar; expected one value (or vector) per sample"
+                )
+
+            # 1D outputs
+            if arr.ndim == 1:
+                if arr.shape[0] == m_expected:
+                    arr2 = arr.reshape(m_expected, 1)
+                elif m_expected == 1:
+                    arr2 = arr.reshape(1, -1)
+                elif self.n_out is not None and arr.size == m_expected * int(self.n_out):
+                    arr2 = arr.reshape(m_expected, int(self.n_out))
+                else:
+                    raise ValueError(
+                        f"Batch QoI returned shape {arr.shape}; expected ({m_expected},) or ({m_expected}, n_out)"
+                    )
+            else:
+                # Special-case common row-vector form for scalar outputs
+                if (
+                    arr.ndim == 2
+                    and arr.shape[0] == 1
+                    and arr.shape[1] == m_expected
+                    and (self.n_out == 1 or self.n_out is None)
+                ):
+                    arr2 = arr.T
+                elif arr.shape[0] == m_expected:
+                    arr2 = arr.reshape(m_expected, -1)
+                elif m_expected == 1:
+                    arr2 = arr.reshape(1, -1)
+                else:
+                    raise ValueError(
+                        f"Batch QoI returned shape {arr.shape}; expected first dimension to be {m_expected}"
+                    )
+
+            # Ensure n_out matches
+            if self.n_out is None:
+                self.n_out = int(arr2.shape[1])
+                self.qoi_dim = int(self.n_out)
+            else:
+                n_out = int(self.n_out)
+                if arr2.shape[1] != n_out:
+                    raise ValueError(
+                        f"Batch QoI returned {arr2.shape[1]} outputs per sample but expected n_out={n_out}"
+                    )
+            return arr2
+
         # If params.unpack exists, ask it to convert the packed X to the
         # form expected by the QoI. For array-style processors this will be
         # a (M,N) ndarray and can be passed directly to the QoI function.
@@ -1023,14 +1090,19 @@ class sampler_cls:
                     self.n_out = cursor
                     return np.concatenate(parts, axis=1)
 
-                return np.asarray(out)
+                return _normalize_batched_array(out, unpacked.shape[0])
 
             # dict-style unpack not supported in batch mode
             raise NotImplementedError("Batch evaluation not implemented for dict-style QoIs (use sequential evaluation)")
 
         # No unpacking required; pass X directly
         try:
-            return self.qoi_fn(X)
+            out = self.qoi_fn(X)
+            if isinstance(out, dict):
+                raise NotImplementedError(
+                    "Batch evaluation not implemented for dict-style QoIs without params.unpack (use sequential evaluation)"
+                )
+            return _normalize_batched_array(out, X.shape[0])
         except TypeError as e:
             raise TypeError(f"QoI evaluation failed: {e}") from e
 

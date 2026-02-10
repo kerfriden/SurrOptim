@@ -1,6 +1,24 @@
 import numpy as np
 
 from surroptim.polynomial_meta_models import polynomial_lasso_regressor, polynomial_ridge_regressor
+
+
+def test_polynomial_SG_infers_level_and_matches_point_count():
+    # Build an SG design and ensure the polynomial SG basis matches its size
+    from surroptim.sparse_grid import generate_sparse_grid
+
+    dim = 2
+    level = 4
+    X = generate_sparse_grid(dim, level)
+    # simple scalar output
+    y = np.sum(X, axis=1, keepdims=True)
+
+    model = polynomial_ridge_regressor(SG=True, level=None)
+    A = model.train_init(X, y)
+
+    assert model.level == level
+    assert A.shape[0] == X.shape[0]
+    assert A.shape[1] == X.shape[0]
 from surroptim.util import r2_score
 
 

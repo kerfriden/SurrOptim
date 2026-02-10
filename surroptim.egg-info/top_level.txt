@@ -1,5 +1,0 @@
-DOCS
-plots
-scripts
-surroptim
-tests

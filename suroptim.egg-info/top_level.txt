@@ -1,4 +1,0 @@
-plots
-scripts
-suroptim
-tests

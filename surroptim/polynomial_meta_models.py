@@ -14,11 +14,12 @@ from surroptim.sparse_grid import generate_list_orders_dim
 class polynomial_regressor(metamodel):
     """Base polynomial regressor with configurable basis and index set.
 
-    Notes:
-        - When `SG=True`, the sparse-grid API expects a hierarchical `level`.
-        - For backward compatibility, if `SG=True` and `level` is omitted,
-          the constructor will treat the provided `order` as the sparse-grid
-          `level` while emitting a `DeprecationWarning`.
+        Notes:
+                - When `SG=True`, the sparse-grid API expects a hierarchical `level`.
+                - If `level` is omitted, the model will try to infer it from the
+                    training design size (works when X comes from the library sparse-grid DOE).
+                - The `order` argument controls total-degree polynomial order when SG=False.
+                    It is not used as a sparse-grid level.
     """
 
     def __init__(self, order: int = 2, level: Optional[int] = None, basis_generator=None, coeff_reg=None, SG: bool = False, tensor: bool = False):
@@ -32,25 +33,62 @@ class polynomial_regressor(metamodel):
         self.tensor = tensor
         self.MI = None
         self.weights = None
-
-        # Backwards-compatible handling: when using sparse-grid mode, prefer
-        # an explicit `level`. If omitted, fall back to `order` but warn.
-        if self.SG:
-            if self.level is None:
-                if self.order is not None:
-                    warnings.warn(
-                        "Using `order` as sparse-grid `level` is deprecated; pass `level=` when SG=True.",
-                        DeprecationWarning,
-                    )
-                    self.level = int(self.order)
-                else:
-                    raise ValueError("SG=True requires `level` to be specified.")
+        # In SG mode we use `level` (hierarchical refinement) rather than a
+        # polynomial total-degree `order`. If level is missing we will attempt
+        # to infer it during training from the number of points in X.
+        if self.SG and self.level is None:
+            # Keep a gentle warning for callers who might be passing `order`
+            # expecting sparse-grid behavior.
+            if self.order not in (None, 2):
+                warnings.warn(
+                    "SG=True uses `level=` (hierarchical refinement). The `order` argument is ignored in SG mode.",
+                    UserWarning,
+                )
 
     def train_init(self, X=None, y=None):
         super().train_init(X, y)
         if self.SG:
             # generate_list_orders_dim expects the sparse-grid refinement level
-            self.MI = generate_list_orders_dim(self.dim, self.level)
+            if self.level is None:
+                # Infer level from the design size when possible.
+                try:
+                    from surroptim.sparse_grid import generate_sparse_grid
+
+                    n = int(np.asarray(X).shape[0])
+                    inferred = None
+                    # brute-force small search; sparse grid level is typically small
+                    for lvl in range(1, 1 + 32):
+                        try:
+                            if len(generate_sparse_grid(self.dim, lvl)) == n:
+                                inferred = lvl
+                                break
+                        except Exception:
+                            break
+                    if inferred is None:
+                        raise ValueError(
+                            f"Could not infer sparse-grid level from X (n_points={n}, dim={self.dim}). "
+                            "Pass `level=` explicitly."
+                        )
+                    self.level = int(inferred)
+                except Exception as e:
+                    raise ValueError(
+                        "SG=True requires `level=` unless it can be inferred from the training design size."
+                    ) from e
+            # Validate that the provided/inferred level matches the training design size.
+            try:
+                from surroptim.sparse_grid import generate_sparse_grid
+
+                expected_n = len(generate_sparse_grid(self.dim, int(self.level)))
+                n = int(np.asarray(X).shape[0])
+                if expected_n != n:
+                    raise ValueError(
+                        f"SG polynomial basis level={self.level} implies {expected_n} sparse-grid points, "
+                        f"but got X with {n} points. Use matching `level=` or matching DOE."
+                    )
+            except ImportError:
+                pass
+
+            self.MI = generate_list_orders_dim(self.dim, int(self.level))
         else:
             if getattr(self, 'tensor', False):
                 # full tensor-product / full-factorial multi-index

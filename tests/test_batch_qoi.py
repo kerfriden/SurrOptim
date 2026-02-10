@@ -122,3 +122,58 @@ def test_qoi_dict_with_flat_key():
     idxs = sampler.qoi_indices(["s", "f"])
     expected = np.concatenate([np.arange(mapping[k].start, mapping[k].stop) for k in ["s", "f"]])
     assert np.array_equal(idxs, expected)
+
+
+def test_batch_qoi_accepts_M_vector_and_normalizes_to_Mx1():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    def qoi_m_vector(arr):
+        a = np.asarray(arr)
+        if a.ndim == 2:
+            # (M,) on purpose
+            return a.sum(axis=1)
+        return np.array([a.sum()])
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=10, qoi_fn=qoi_m_vector)
+    sampler.sample(N=5, as_additional_points=False, batch_computation=True)
+
+    assert sampler.Y.shape == (5, 1)
+    assert np.allclose(sampler.Y[:, 0], np.sum(sampler.X, axis=1))
+
+
+def test_batch_qoi_accepts_row_vector_1xM_and_normalizes_to_Mx1():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    def qoi_row_vector(arr):
+        a = np.asarray(arr)
+        if a.ndim == 2:
+            # (1,M) on purpose
+            return np.atleast_2d(a.sum(axis=1))
+        return np.array([[a.sum()]])
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=11, qoi_fn=qoi_row_vector)
+    sampler.sample(N=6, as_additional_points=False, batch_computation=True)
+
+    assert sampler.Y.shape == (6, 1)
+    assert np.allclose(sampler.Y[:, 0], np.sum(sampler.X, axis=1))
+
+
+def test_batch_qoi_multioutput_Mx2_is_supported_and_preserved():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    def qoi_two_outputs(arr):
+        a = np.asarray(arr)
+        if a.ndim == 2:
+            # (M,2)
+            return a[:, :2]
+        # (2,) for single-sample -> auto-detect n_out=2
+        return np.array([a[0], a[1]])
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=12, qoi_fn=qoi_two_outputs)
+    sampler.sample(N=4, as_additional_points=False, batch_computation=True)
+
+    assert sampler.Y.shape == (4, 2)
+    assert np.allclose(sampler.Y, sampler.X[:, :2])
