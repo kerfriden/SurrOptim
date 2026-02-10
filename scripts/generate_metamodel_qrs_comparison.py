@@ -13,16 +13,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from surroptim.sampler import sampler_old_cls as sampler_cls
-from gaussian_process_meta_model import GP_regressor
+from surroptim.gaussian_process_meta_model import GP_regressor
 
 try:
-    from neural_network_meta_model import neural_net_regressor
+    from surroptim.neural_network_meta_model import neural_net_regressor
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
     print("Warning: PyTorch not available, skipping Neural Network case")
 
-from neighrest_neighbour_meta_model import NNeigh_regressor
+from surroptim.neighrest_neighbour_meta_model import NNeigh_regressor
 from surroptim.util import prediction_plot
 
 

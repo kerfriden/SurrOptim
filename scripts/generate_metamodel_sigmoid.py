@@ -6,7 +6,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from surroptim.sampler import sampler_old_cls as sampler_cls
-from polynomial_meta_models import polynomial_ridge_regressor, polynomial_lasso_regressor
+from surroptim.polynomial_meta_models import polynomial_ridge_regressor, polynomial_lasso_regressor
 from surroptim.util import prediction_plot
 
 

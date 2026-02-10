@@ -149,10 +149,28 @@ class sampler_legacy_cls:
             return None
         return self._reference_to_physical_samples(self.X_reference)
 
+    @property
+    def X_normalised(self) -> Optional[np.ndarray]:
+        """Normalized/unit-space samples in [-1, 1]^d (legacy spelling)."""
+        return self.X_reference
+
+    @property
+    def X_normalized(self) -> Optional[np.ndarray]:
+        """Normalized/unit-space samples in [-1, 1]^d (US spelling)."""
+        return self.X_reference
+
     # New preferred lowercase aliases with backward-compat read-only mapping
     @property
     def x(self) -> Optional[np.ndarray]:
         return self.X
+
+    @property
+    def x_normalised(self) -> Optional[np.ndarray]:
+        return self.X_reference
+
+    @property
+    def x_normalized(self) -> Optional[np.ndarray]:
+        return self.X_reference
 
     # Reference/unit-space accessors for legacy sampler
     @property
