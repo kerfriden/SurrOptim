@@ -177,3 +177,30 @@ def test_batch_qoi_multioutput_Mx2_is_supported_and_preserved():
 
     assert sampler.Y.shape == (4, 2)
     assert np.allclose(sampler.Y, sampler.X[:, :2])
+
+
+def test_qoi_force_2d_makes_single_sample_2d():
+    """When qoi_force_2d=True, QoI should always receive 2D arrays.
+
+    This includes the initial QoI call used to auto-detect n_out.
+    """
+    init_array = np.array([0.0, 0.0])
+    active_specs = {
+        "a0": {"select": np.array([1, 1], bool), "lower": 0.0, "upper": 1.0, "scale": "linear"}
+    }
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    called = {"ndims": []}
+
+    def qoi_expect_2d(x):
+        a = np.asarray(x)
+        called["ndims"].append(a.ndim)
+        assert a.ndim == 2
+        # scalar QoI per row
+        return a.sum(axis=1)
+
+    s = sampler_new_cls(params=P, DOE_type="QRS", seed=0, qoi_fn=qoi_expect_2d, qoi_force_2d=True)
+    s.sample(N=3, as_additional_points=False, batch_computation=False)
+
+    assert len(called["ndims"]) >= 1
+    assert s.Y.shape == (3, 1)

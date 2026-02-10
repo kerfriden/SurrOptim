@@ -4,6 +4,47 @@
 # SurrOptim
 
 Simple Surrogate Modelling and Optimization Library.
+
+## QoI (Quantity of Interest) function conventions (important)
+
+SurrOptim calls your QoI function (`qoi_fn` / legacy `compute_QoIs`) in either **sequential** (one sample at a time) or **batch** mode (many samples at once). The expected *input shape* depends on which sampler you use.
+
+### 1) Legacy sampler (distributions/bounds) — `sampler_old_cls`
+
+- **Sequential mode**: QoI receives a 2D array shaped `(1, d)`.
+- **Batch mode** (`sample_in_batch=True`): QoI receives a 2D array shaped `(M, d)`.
+
+So for the legacy sampler, your QoI can safely assume it always gets a 2D array.
+
+### 2) Params-based sampler — `sampler_new_cls` / `sampler_cls(params=...)`
+
+This sampler delegates parameter packing/unpacking to the provided `params_cls` processor.
+
+- **Batch mode** (`batch_computation=True`, or legacy alias `sample_in_batch=True`): QoI receives a 2D array shaped `(M, d)` (for array-mode params). Output is normalized internally so that `sampler.Y` becomes `(M, n_out)`.
+- **Sequential mode**: QoI may receive a 1D array shaped `(d,)` by default.
+
+Many ML models (scikit-learn, PyTorch wrappers, etc.) expect 2D inputs even for a single sample. For these cases, construct the sampler with `qoi_force_2d=True` to ensure QoI always receives `(1, d)` for single-sample calls (including the initial call used to auto-detect `n_out`).
+
+### Recommended robust pattern (works everywhere)
+
+Write QoIs that accept both 1D and 2D inputs by normalizing at the top:
+
+```python
+def my_qoi(X):
+	X = np.asarray(X, dtype=float)
+	if X.ndim == 1:
+		X = X.reshape(1, -1)  # always (M, d)
+
+	# ... compute one QoI row per input row ...
+	y = X.sum(axis=1)
+	return y  # (M,) or (M,1) are both acceptable
+```
+
+### QoI outputs
+
+- If your QoI returns an array-like, SurrOptim stores results in `sampler.Y` as a 2D array shaped `(M, n_out)`.
+- In batch mode, common outputs such as `(M,)`, `(M,1)`, `(1,M)` (scalar QoI), and `(M,k)` are accepted and normalized.
+- If your QoI returns a `dict`, the params-based sampler flattens it into columns in a deterministic key layout and exposes helper methods like `sampler.qoi_slices(key)`.
 ## Running Tests
 
 SurrOptim has a comprehensive test suite that can be run with different optional dependencies.

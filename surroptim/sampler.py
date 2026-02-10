@@ -526,6 +526,7 @@ class sampler_cls:
         doe_type: str = 'LHS',
         DOE_type: Optional[str] = None,
         qoi_receive_packed: bool = False,
+        qoi_force_2d: bool = False,
     ):
         # params is expected to encapsulate parameter layout and optionally
         # metadata like n_out. Accept qoi_fn and active_keys as explicit
@@ -535,6 +536,9 @@ class sampler_cls:
         self.qoi_fn = qoi_fn if qoi_fn is not None else compute_QoIs
         self.compute_QoIs = self.qoi_fn  # expose legacy name
         self.active_keys = active_keys if active_keys is not None else getattr(params, "active_keys", None)
+        # If True, ensure all array inputs passed to QoI are 2D (M, d), even for single samples.
+        # This helps with ML models (sklearn/torch) that expect 2D inputs.
+        self.qoi_force_2d = bool(qoi_force_2d)
         self.seed = int(seed) if seed is not None else None
         # If False (default), expand packed representations to the full base
         # parameter array before calling `qoi_fn` so QoIs see the same full
@@ -679,13 +683,25 @@ class sampler_cls:
                             sl = it["sl"]
                             mask = it["mask"]
                             full[mask] = unpacked[sl]
-                    qval = self.qoi_fn(full)
+                    if self.qoi_force_2d and np.asarray(full).ndim == 1:
+                        qval = self.qoi_fn(np.asarray(full).reshape(1, -1))
+                    else:
+                        qval = self.qoi_fn(full)
+                else:
+                    if self.qoi_force_2d and np.asarray(unpacked).ndim == 1:
+                        qval = self.qoi_fn(np.asarray(unpacked).reshape(1, -1))
+                    else:
+                        qval = self.qoi_fn(unpacked)
+            else:
+                if isinstance(unpacked, np.ndarray) and self.qoi_force_2d and np.asarray(unpacked).ndim == 1:
+                    qval = self.qoi_fn(np.asarray(unpacked).reshape(1, -1))
                 else:
                     qval = self.qoi_fn(unpacked)
-            else:
-                qval = self.qoi_fn(unpacked)
         else:
-            qval = self.qoi_fn(x_center)
+            if self.qoi_force_2d and np.asarray(x_center).ndim == 1:
+                qval = self.qoi_fn(np.asarray(x_center).reshape(1, -1))
+            else:
+                qval = self.qoi_fn(x_center)
         print(f"QoIs at test point: {qval}")
         # If QoIs returns a dict, build layout to allow slicing by key
         if isinstance(qval, dict):
@@ -1086,7 +1102,10 @@ class sampler_cls:
                     )
                     outs = []
                     for i in range(unpacked.shape[0]):
-                        oi = self.qoi_fn(to_pass[i])
+                        xi = to_pass[i]
+                        if self.qoi_force_2d and np.asarray(xi).ndim == 1:
+                            xi = np.asarray(xi).reshape(1, -1)
+                        oi = self.qoi_fn(xi)
                         outs.append(np.asarray(oi).ravel())
                     return np.vstack(outs)
 
@@ -1153,6 +1172,9 @@ class sampler_cls:
                                 to_call = self._expand_packed_to_full(unpacked)
                         else:
                             to_call = unpacked if unpacked.ndim == 1 else unpacked.reshape(unpacked.shape)
+
+                        if self.qoi_force_2d and np.asarray(to_call).ndim == 1:
+                            to_call = np.asarray(to_call).reshape(1, -1)
                         out = self.qoi_fn(to_call)
                     else:
                         out = self.qoi_fn(unpacked)
