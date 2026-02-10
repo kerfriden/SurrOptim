@@ -19,14 +19,16 @@ def rosen_qoi(X: np.ndarray) -> np.ndarray:
 
 def main() -> None:
     os.makedirs("plots", exist_ok=True)
-    cases = [("QRS", 64), ("LHS", 64), ("PRS", 64), ("SG", 3)]
+    # Note: for doe_type='SG', the sampler interprets N as sparse-grid refinement level.
+    # In 2D, level=5 yields 65 points (close to 64) for a fair visual comparison.
+    cases = [("QRS", 64), ("LHS", 64), ("PRS", 64), ("SG", 5)]
 
     for doe, N in cases:
         sampler = sampler_cls(
             distributions=["uniform", "uniform"],
             bounds=[[-2, 2], [-2, 2]],
             qoi_fn=rosen_qoi,
-            n_out=2,
+            DOE_type=doe,
         )
         sampler.sample(N=N)
         prediction_plot(

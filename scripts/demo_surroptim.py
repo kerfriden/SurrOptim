@@ -1,10 +1,16 @@
 """Demo script: SurrOptim sampling and metamodeling."""
 
+import os
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from surroptim.sampler import sampler_old_cls as sampler_cls
 from surroptim.polynomial_meta_models import polynomial_lasso_regressor
+
+
+os.makedirs("plots", exist_ok=True)
 
 # ============================================================================
 # 1. Simple sparse grid sampling
@@ -25,7 +31,9 @@ plt.xlabel("x (log-uniform: [-2, 2])")
 plt.ylabel("y (uniform: [-2, 2])")
 plt.grid()
 plt.title("Sparse Grid Samples")
-plt.show()
+plt.tight_layout()
+plt.savefig("plots/demo_sparse_grid_samples.png", dpi=150)
+plt.close()
 
 # ============================================================================
 # 1b. Sparse grid with log-uniform (requires positive bounds)
@@ -46,7 +54,9 @@ plt.xlabel("x (log-uniform: [-2, 2])")
 plt.ylabel("y (uniform: [-2, 2])")
 plt.grid()
 plt.title("Sparse Grid Samples (Log-Uniform)")
-plt.show()
+plt.tight_layout()
+plt.savefig("plots/demo_sparse_grid_samples_log_uniform.png", dpi=150)
+plt.close()
 
 # ============================================================================
 # 2. Incremental sampling with QoI evaluation and active_keys
@@ -107,7 +117,8 @@ ax.grid(True, alpha=0.3)
 ax.legend()
 plt.colorbar(ax.collections[0], ax=ax, label='Sigmoid QoI')
 plt.tight_layout()
-plt.show()
+plt.savefig("plots/demo_incremental_sampling_qrs.png", dpi=150)
+plt.close(fig)
 
 # ============================================================================
 # 3. Train metamodel and predict on grid
@@ -150,7 +161,8 @@ ax.grid(True, alpha=0.3)
 ax.legend()
 plt.colorbar(sc_train, ax=ax, label='Sigmoid QoI')
 plt.tight_layout()
-plt.show()
+plt.savefig("plots/demo_model_predictions_test_set.png", dpi=150)
+plt.close(fig)
 
 # ============================================================================
 # 4. Contour plot on grid
@@ -198,6 +210,7 @@ ax.set_title("Polynomial Model Contour + Training Points")
 ax.legend()
 ax.grid(True, alpha=0.2)
 plt.tight_layout()
-plt.show()
+plt.savefig("plots/demo_polynomial_model_contour.png", dpi=150)
+plt.close(fig)
 
 print("\n✓ Demo completed successfully!")
