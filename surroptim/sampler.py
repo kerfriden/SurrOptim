@@ -52,6 +52,9 @@ def _qoi_preview(obj, *, max_chars: int = 500) -> str:
     return s[: max_chars - 40] + f" ... (truncated, {len(s)} chars)"
 
 
+_DEFAULT_QOI_FLAT_KEY = "K"
+
+
 class sampler_legacy_cls:
     """
 
@@ -633,6 +636,14 @@ class sampler_cls:
 
         print("... done building sampler_new_cls")
 
+    def _effective_qoi_flat_key(self) -> str:
+        """Return the key used for single-output (non-dict) QoIs.
+
+        Always returns a key so that a QoI layout can be built and unflattening
+        is available without extra user configuration.
+        """
+        return self.qoi_flat_key if self.qoi_flat_key is not None else _DEFAULT_QOI_FLAT_KEY
+
     def _is_sparse_grid(self) -> bool:
         """Check if current DOE type is sparse grid (SG)."""
         return (self.doe_type is not None and str(self.doe_type).upper() == 'SG') or (
@@ -770,17 +781,15 @@ class sampler_cls:
         else:
             arr = np.asarray(qval)
             self.qoi_dim = int(arr.size) if arr.size is not None else int(np.max(arr.shape))
-            if self.qoi_flat_key is not None:
-                self._qoi_layout = [
-                    {
-                        "key": self.qoi_flat_key,
-                        "shape": arr.shape,
-                        "size": int(self.qoi_dim),
-                        "sl": slice(0, int(self.qoi_dim)),
-                    }
-                ]
-            else:
-                self._qoi_layout = None
+            key = self._effective_qoi_flat_key()
+            self._qoi_layout = [
+                {
+                    "key": key,
+                    "shape": arr.shape,
+                    "size": int(self.qoi_dim),
+                    "sl": slice(0, int(self.qoi_dim)),
+                }
+            ]
             self.n_out = self.qoi_dim
 
     def _build_qoi_layout(self, qoi_dict: dict) -> None:
@@ -902,11 +911,11 @@ class sampler_cls:
         if as_dict is None:
             # Default: if caller asked for a single key and that key matches the
             # flat-key layout, return the array directly.
+            effective_key = self._effective_qoi_flat_key()
             as_dict_resolved = not (
                 one_key_layout
                 and len(layout) == 1
-                and getattr(self, "qoi_flat_key", None) is not None
-                and layout[0]["key"] == getattr(self, "qoi_flat_key", None)
+                and layout[0]["key"] == effective_key
             )
         else:
             as_dict_resolved = bool(as_dict)
@@ -1351,7 +1360,22 @@ class sampler_cls:
                     self.n_out = cursor
                     return np.concatenate(parts, axis=1)
 
-                return _normalize_batched_array(out, unpacked.shape[0])
+                arr2 = _normalize_batched_array(out, unpacked.shape[0])
+                # Always build a one-key layout for non-dict outputs.
+                key = self._effective_qoi_flat_key()
+                n_out = int(self.n_out) if self.n_out is not None else int(arr2.shape[1])
+                self.qoi_dim = int(n_out)
+                out_arr = np.asarray(out)
+                if out_arr.ndim >= 2 and out_arr.shape[0] == arr2.shape[0]:
+                    per_sample_shape = tuple(out_arr.shape[1:])
+                elif out_arr.ndim == 1 and out_arr.shape[0] == arr2.shape[0]:
+                    per_sample_shape = ()
+                else:
+                    per_sample_shape = (n_out,)
+                self._qoi_layout = [
+                    {"key": key, "shape": per_sample_shape, "size": n_out, "sl": slice(0, n_out)}
+                ]
+                return arr2
 
             # dict-style unpack not supported in batch mode
             raise NotImplementedError("Batch evaluation not implemented for dict-style QoIs (use sequential evaluation)")
@@ -1364,25 +1388,26 @@ class sampler_cls:
                     "Batch evaluation not implemented for dict-style QoIs without params.unpack (use sequential evaluation)"
                 )
             arr2 = _normalize_batched_array(out, X.shape[0])
-            if getattr(self, "qoi_flat_key", None) is not None:
-                n_out = int(self.n_out) if self.n_out is not None else int(arr2.shape[1])
-                self.qoi_dim = int(n_out)
-                out_arr = np.asarray(out)
-                # Best-effort preserve original per-sample tensor shape.
-                if out_arr.ndim >= 2 and out_arr.shape[0] == X.shape[0]:
-                    per_sample_shape = tuple(out_arr.shape[1:])
-                elif out_arr.ndim == 1 and out_arr.shape[0] == X.shape[0]:
-                    per_sample_shape = ()
-                else:
-                    per_sample_shape = (n_out,)
-                self._qoi_layout = [
-                    {
-                        "key": self.qoi_flat_key,
-                        "shape": per_sample_shape,
-                        "size": n_out,
-                        "sl": slice(0, n_out),
-                    }
-                ]
+            # Always build a one-key layout for non-dict outputs.
+            key = self._effective_qoi_flat_key()
+            n_out = int(self.n_out) if self.n_out is not None else int(arr2.shape[1])
+            self.qoi_dim = int(n_out)
+            out_arr = np.asarray(out)
+            # Best-effort preserve original per-sample tensor shape.
+            if out_arr.ndim >= 2 and out_arr.shape[0] == X.shape[0]:
+                per_sample_shape = tuple(out_arr.shape[1:])
+            elif out_arr.ndim == 1 and out_arr.shape[0] == X.shape[0]:
+                per_sample_shape = ()
+            else:
+                per_sample_shape = (n_out,)
+            self._qoi_layout = [
+                {
+                    "key": key,
+                    "shape": per_sample_shape,
+                    "size": n_out,
+                    "sl": slice(0, n_out),
+                }
+            ]
             return arr2
         except TypeError as e:
             raise TypeError(f"QoI evaluation failed: {e}") from e
@@ -1442,11 +1467,12 @@ class sampler_cls:
                         out_arr = np.asarray(out).ravel()
                         self.n_out = len(out_arr)
                         self.qoi_dim = int(self.n_out)
-                        if getattr(self, "qoi_flat_key", None) is not None and getattr(self, "_qoi_layout", None) is None:
+                        if getattr(self, "_qoi_layout", None) is None:
                             n_out = int(self.n_out)
+                            key = self._effective_qoi_flat_key()
                             self._qoi_layout = [
                                 {
-                                    "key": self.qoi_flat_key,
+                                    "key": key,
                                     "shape": np.asarray(out).shape,
                                     "size": n_out,
                                     "sl": slice(0, n_out),

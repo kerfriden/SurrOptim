@@ -338,3 +338,29 @@ def test_unravel_qoi_matrix_from_flat_key_layout():
     expected[:, 1, 0] = X[:, 0] + X[:, 1]
     expected[:, 1, 1] = 1.0
     assert np.allclose(t, expected)
+
+
+def test_unravel_qoi_matrix_without_flat_key_still_works_via_default_layout():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    def qoi_matrix(x):
+        a = np.asarray(x)
+        if a.ndim == 2:
+            m = a.shape[0]
+            out = np.zeros((m, 2, 2), dtype=float)
+            out[:, 0, 0] = a[:, 0]
+            out[:, 0, 1] = a[:, 1]
+            out[:, 1, 0] = a[:, 0] + a[:, 1]
+            out[:, 1, 1] = 1.0
+            return out
+        return np.array([[a[0], a[1]], [a[0] + a[1], 1.0]], dtype=float)
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=42, qoi_fn=qoi_matrix)
+    sampler.sample(N=3, as_additional_points=False, batch_computation=True)
+
+    # Default one-key layout exists for non-dict QoIs
+    assert sampler.qoi_slices("K") == slice(0, 4)
+
+    t = sampler.unravel_qoi(sampler.Y)
+    assert np.asarray(t).shape == (3, 2, 2)
