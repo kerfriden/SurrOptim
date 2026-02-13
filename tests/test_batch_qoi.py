@@ -269,3 +269,72 @@ def test_qoi_can_return_matrix_and_flat_key_exposes_slice():
     expected[:, 2] = X[:, 0] + X[:, 1]
     expected[:, 3] = 1.0
     assert np.allclose(sampler.Y, expected)
+
+
+def test_unravel_qoi_dict_roundtrip_batch_and_single():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    def qoi_dict(arr):
+        a = np.asarray(arr)
+        if a.ndim == 2:
+            s = np.sum(a, axis=1)  # (M,)
+            v = a[:, :2]  # (M,2)
+            return {"s": s, "v": v}
+        return {"s": a.sum(), "v": np.array([a[0], a[1]])}
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=40, qoi_fn=qoi_dict)
+    sampler.sample(N=4, as_additional_points=False, batch_computation=True)
+
+    # Batch unflatten -> dict of tensors
+    d = sampler.unravel_qoi(sampler.Y)
+    assert set(d.keys()) == {"s", "v"}
+    assert d["s"].shape == (4,)
+    assert d["v"].shape == (4, 2)
+    assert np.allclose(d["s"], np.sum(sampler.X, axis=1))
+    assert np.allclose(d["v"], sampler.X[:, :2])
+
+    # Single-sample unflatten -> dict with scalar + vector
+    d0 = sampler.unravel_qoi(sampler.Y[0])
+    assert set(d0.keys()) == {"s", "v"}
+    assert np.isscalar(d0["s"])
+    assert np.asarray(d0["v"]).shape == (2,)
+    assert np.isclose(d0["s"], float(np.sum(sampler.X[0])))
+    assert np.allclose(d0["v"], sampler.X[0, :2])
+
+
+def test_unravel_qoi_matrix_from_flat_key_layout():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    def qoi_matrix(x):
+        a = np.asarray(x)
+        if a.ndim == 2:
+            m = a.shape[0]
+            out = np.zeros((m, 2, 2), dtype=float)
+            out[:, 0, 0] = a[:, 0]
+            out[:, 0, 1] = a[:, 1]
+            out[:, 1, 0] = a[:, 0] + a[:, 1]
+            out[:, 1, 1] = 1.0
+            return out
+        return np.array([[a[0], a[1]], [a[0] + a[1], 1.0]], dtype=float)
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=41, qoi_fn=qoi_matrix, qoi_flat_key="K")
+    sampler.sample(N=3, as_additional_points=False, batch_computation=True)
+
+    # Default behavior for single-key flat layout -> returns array, not dict
+    t = sampler.unravel_qoi(sampler.Y)
+    assert np.asarray(t).shape == (3, 2, 2)
+
+    # Single sample
+    t0 = sampler.unravel_qoi(sampler.Y[0])
+    assert np.asarray(t0).shape == (2, 2)
+
+    # Numeric check
+    X = sampler.X
+    expected = np.zeros((X.shape[0], 2, 2), dtype=float)
+    expected[:, 0, 0] = X[:, 0]
+    expected[:, 0, 1] = X[:, 1]
+    expected[:, 1, 0] = X[:, 0] + X[:, 1]
+    expected[:, 1, 1] = 1.0
+    assert np.allclose(t, expected)

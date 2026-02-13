@@ -801,6 +801,108 @@ class sampler_cls:
             return np.array([], dtype=float)
         return np.concatenate(parts)
 
+    def unravel_qoi(self, y_flat, keys=None, *, as_dict: Optional[bool] = None, squeeze: bool = True):
+        """Unflatten a QoI vector back to its original tensor/dict structure.
+
+        This is the inverse of the internal QoI flattening used by the sampler.
+        It relies on the stored QoI layout (`self._qoi_layout`), which is built
+        when the QoI returns a dict (or when `qoi_flat_key` is used for non-dict
+        outputs).
+
+        Supports:
+        - Single sample: `y_flat` shape `(qoi_dim,)`
+        - Batched: `y_flat` shape `(M, qoi_dim)`
+
+        Args:
+            y_flat: Flattened QoI array.
+            keys: Optional key or sequence of keys to extract.
+            as_dict: If True, always returns a dict. If False, and the layout has
+                a single key (typically `qoi_flat_key`), returns the unflattened
+                array for that key. If None (default), returns an array only for
+                the single-key (`qoi_flat_key`) case, otherwise returns a dict.
+            squeeze: If True, scalar per-sample outputs are squeezed to `(M,)` in
+                batch mode and to Python scalars in single-sample mode.
+
+        Returns:
+            Dict of key -> unflattened array/tensor, or a single array/tensor for
+            the one-key layout.
+        """
+        layout = getattr(self, "_qoi_layout", None)
+        if layout is None:
+            raise KeyError(
+                "QoI layout not available; cannot unflatten. Ensure the QoI returned a dict at least once, "
+                "or set qoi_flat_key for non-dict QoI outputs."
+            )
+
+        a = np.asarray(y_flat)
+        if a.ndim not in (1, 2):
+            raise ValueError(f"Expected y_flat with ndim 1 or 2, got shape {a.shape}")
+
+        qoi_dim = int(getattr(self, "qoi_dim", 0) or (layout[-1]["sl"].stop if layout else 0))
+        if a.ndim == 1:
+            if a.size != qoi_dim:
+                raise ValueError(f"Expected y_flat of length {qoi_dim}, got {a.size}")
+        else:
+            if a.shape[1] != qoi_dim:
+                raise ValueError(f"Expected y_flat with shape (M, {qoi_dim}), got {a.shape}")
+
+        if keys is None:
+            key_order = [it["key"] for it in layout]
+        else:
+            if isinstance(keys, str):
+                key_order = [keys]
+            else:
+                key_order = list(keys)
+
+        def _find_item(k: str) -> dict:
+            for it in layout:
+                if it["key"] == k:
+                    return it
+            raise KeyError(f"QoI key '{k}' not found")
+
+        one_key_layout = (len(key_order) == 1)
+        if as_dict is None:
+            # Default: if caller asked for a single key and that key matches the
+            # flat-key layout, return the array directly.
+            as_dict_resolved = not (
+                one_key_layout
+                and len(layout) == 1
+                and getattr(self, "qoi_flat_key", None) is not None
+                and layout[0]["key"] == getattr(self, "qoi_flat_key", None)
+            )
+        else:
+            as_dict_resolved = bool(as_dict)
+
+        out_dict = {}
+        if a.ndim == 1:
+            for k in key_order:
+                it = _find_item(k)
+                sl = it["sl"]
+                shape = tuple(np.atleast_1d(it.get("shape", ())).tolist()) if it.get("shape", ()) != () else ()
+                part = np.asarray(a[sl])
+                if squeeze and part.size == 1:
+                    # Treat 1-element values as scalars (even if recorded shape was (1,))
+                    out_dict[k] = part.reshape(()).item()
+                else:
+                    out_dict[k] = part.reshape(shape)
+        else:
+            m = int(a.shape[0])
+            for k in key_order:
+                it = _find_item(k)
+                sl = it["sl"]
+                shape = tuple(np.atleast_1d(it.get("shape", ())).tolist()) if it.get("shape", ()) != () else ()
+                part = np.asarray(a[:, sl])
+                if squeeze and part.shape[1] == 1:
+                    # Treat 1-element outputs as scalars per sample
+                    out_dict[k] = part.reshape(m)
+                else:
+                    out_dict[k] = part.reshape((m,) + shape)
+
+        if as_dict_resolved:
+            return out_dict
+        # Return single array/tensor for one-key selection
+        return out_dict[key_order[0]]
+
     def qoi_slices(self, keys):
         """Return slice(s) into the flattened QoI vector for key(s).
 
@@ -1227,10 +1329,18 @@ class sampler_cls:
             if getattr(self, "qoi_flat_key", None) is not None:
                 n_out = int(self.n_out) if self.n_out is not None else int(arr2.shape[1])
                 self.qoi_dim = int(n_out)
+                out_arr = np.asarray(out)
+                # Best-effort preserve original per-sample tensor shape.
+                if out_arr.ndim >= 2 and out_arr.shape[0] == X.shape[0]:
+                    per_sample_shape = tuple(out_arr.shape[1:])
+                elif out_arr.ndim == 1 and out_arr.shape[0] == X.shape[0]:
+                    per_sample_shape = ()
+                else:
+                    per_sample_shape = (n_out,)
                 self._qoi_layout = [
                     {
                         "key": self.qoi_flat_key,
-                        "shape": (n_out,),
+                        "shape": per_sample_shape,
                         "size": n_out,
                         "sl": slice(0, n_out),
                     }
