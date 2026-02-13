@@ -48,8 +48,12 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray, multioutput: str = "uniform
             y_pred = y_pred.ravel()
 
     if y_true.ndim == 1:
-        ss_res = np.sum((y_true - y_pred) ** 2)
-        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        ss_res = float(np.sum((y_true - y_pred) ** 2))
+        ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
+        if ss_tot == 0.0:
+            # Match sklearn's default `force_finite=True` behavior:
+            # constant y_true -> R2 is 1.0 if perfect prediction else 0.0.
+            return 1.0 if ss_res == 0.0 else 0.0
         return 1.0 - ss_res / ss_tot
 
     # At this point treat as multi-output: axis=1 indexes outputs
@@ -64,10 +68,13 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray, multioutput: str = "uniform
     for j in range(n_out):
         yt = y_true[:, j]
         yp = y_pred[:, j]
-        ss_res = np.sum((yt - yp) ** 2)
-        ss_tot = np.sum((yt - np.mean(yt)) ** 2)
-        per[j] = 1.0 - ss_res / ss_tot
+        ss_res = float(np.sum((yt - yp) ** 2))
+        ss_tot = float(np.sum((yt - np.mean(yt)) ** 2))
         denom[j] = ss_tot
+        if ss_tot == 0.0:
+            per[j] = 1.0 if ss_res == 0.0 else 0.0
+        else:
+            per[j] = 1.0 - ss_res / ss_tot
 
     if multioutput == "raw_values":
         return per

@@ -68,3 +68,37 @@ def test_metamodel_test_accepts_single_sample_tensor_y_test():
 
     # Should not raise; metamodel.test should normalize y_test to (1,4)
     m.test(X_test=X_test, y_test=y_test)
+
+
+def test_r2_constant_target_matches_sklearn_force_finite():
+    # When y_true is constant, sklearn returns 0.0 for imperfect prediction
+    # (and 1.0 for perfect prediction) with its default force_finite behavior.
+    N = 20
+    y_true = np.ones((N, 1))
+    y_pred = np.zeros((N, 1))
+
+    util_val = r2_score(y_true, y_pred)
+    sk_val = sk_r2(y_true, y_pred)
+    assert np.allclose(util_val, sk_val, atol=1e-12)
+
+
+def test_r2_constant_target_per_output_does_not_blow_up():
+    rng = np.random.default_rng(42)
+    N = 30
+    # First output is constant, second varies
+    y_true = np.c_[np.ones(N), rng.normal(size=N)]
+    y_pred = np.c_[np.zeros(N), y_true[:, 1] * 0.95]
+
+    util_val = r2_score(y_true, y_pred)
+    sk_val = sk_r2(y_true, y_pred)
+    assert np.allclose(util_val, sk_val, atol=1e-12)
+
+
+def test_r2_constant_target_matches_sklearn_convention():
+    # For constant y_true, sklearn defines R² as 0.0 unless predictions are perfect.
+    y_true = np.ones((10, 3))
+    y_pred = np.zeros((10, 3))
+    assert np.allclose(r2_score(y_true, y_pred), sk_r2(y_true, y_pred))
+
+    y_pred2 = y_true.copy()
+    assert np.allclose(r2_score(y_true, y_pred2), sk_r2(y_true, y_pred2))
