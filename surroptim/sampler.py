@@ -14,6 +14,44 @@ from .distributions import DistributionFactory
 from .doe_strategies import DOEFactory
 
 
+def _qoi_preview(obj, *, max_chars: int = 500) -> str:
+    """Return a short, terminal-friendly preview of a QoI value."""
+
+    def _arr_desc(a: np.ndarray) -> str:
+        a = np.asarray(a)
+        # Keep output stable and short: shape/dtype + tiny preview
+        with np.printoptions(edgeitems=2, threshold=8, linewidth=120, suppress=True):
+            preview = np.array2string(a)
+        return f"array(shape={a.shape}, dtype={a.dtype}, preview={preview})"
+
+    if isinstance(obj, dict):
+        parts = []
+        for k, v in obj.items():
+            try:
+                av = np.asarray(v)
+                if av.ndim == 0:
+                    desc = f"scalar(dtype={av.dtype}, value={av.item()})"
+                else:
+                    desc = f"array(shape={av.shape}, dtype={av.dtype})"
+            except Exception:
+                desc = f"{type(v).__name__}"
+            parts.append(f"{k!r}: {desc}")
+        s = "{" + ", ".join(parts) + "}"
+    else:
+        try:
+            a = np.asarray(obj)
+            if a.ndim == 0:
+                s = f"scalar(dtype={a.dtype}, value={a.item()})"
+            else:
+                s = _arr_desc(a)
+        except Exception:
+            s = repr(obj)
+
+    if len(s) <= max_chars:
+        return s
+    return s[: max_chars - 40] + f" ... (truncated, {len(s)} chars)"
+
+
 class sampler_legacy_cls:
     """
 
@@ -197,7 +235,7 @@ class sampler_legacy_cls:
         else:
             qval = self.qoi_fn(X)
 
-        print(f"QoIs at test point: {qval}")
+        print(f"QoIs at test point: {_qoi_preview(qval)}")
         arr = np.asarray(qval)
         # Scalar QoI -> one output
         if arr.ndim == 0:
@@ -724,7 +762,7 @@ class sampler_cls:
                 qval = self.qoi_fn(np.asarray(x_center).reshape(1, -1))
             else:
                 qval = self.qoi_fn(x_center)
-        print(f"QoIs at test point: {qval}")
+        print(f"QoIs at test point: {_qoi_preview(qval)}")
         # If QoIs returns a dict, build layout to allow slicing by key
         if isinstance(qval, dict):
             self._build_qoi_layout(qval)
