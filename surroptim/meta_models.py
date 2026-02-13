@@ -57,6 +57,26 @@ class metamodel:
         if y_test is None:
             raise ValueError("No test dataset y_test provided")
 
+        X_test = np.asarray(X_test)
+        y_test = np.asarray(y_test)
+
+        if X_test.ndim == 1:
+            X_test = X_test.reshape(-1, 1)
+
+        # Normalize y_test to (N, n_out) where possible.
+        if y_test.ndim == 0:
+            y_test = y_test.reshape(1, 1)
+        elif y_test.ndim == 1:
+            y_test = y_test.reshape(-1, 1)
+        elif y_test.ndim > 2:
+            y_test = y_test.reshape(y_test.shape[0], -1)
+        else:
+            # Heuristic: if caller provided a single-sample tensor without the
+            # sample axis (e.g. (2,2)) and X_test has one sample, interpret it
+            # as one sample with multiple outputs.
+            if X_test.ndim == 2 and X_test.shape[0] == 1 and y_test.shape[0] != 1:
+                y_test = y_test.reshape(1, -1)
+
         self.X_test = X_test
         self.y_test = y_test
 

@@ -1,6 +1,7 @@
 import numpy as np
 from surroptim.util import r2_score, r2_score_simple
 from sklearn.metrics import r2_score as sk_r2
+from surroptim.meta_models import metamodel
 
 
 def test_r2_matches_sklearn_for_single_output_column():
@@ -39,3 +40,31 @@ def test_r2_flattens_tensor_outputs_per_sample():
     util_r2 = r2_score(y_true, y_pred)
     sk_r2_val = sk_r2(y_true.reshape(N, -1), y_pred.reshape(N, -1))
     assert np.allclose(util_r2, sk_r2_val, atol=1e-12)
+
+
+def test_metamodel_test_accepts_single_sample_tensor_y_test():
+    class _Dummy(metamodel):
+        def train(self) -> None:
+            return
+
+        def predict(self, X: np.ndarray) -> np.ndarray:
+            X = np.asarray(X)
+            if X.ndim == 1:
+                X = X.reshape(1, -1)
+            # predict zeros with the trained output width
+            return np.zeros((X.shape[0], int(self.n_out)))
+
+    rng = np.random.default_rng(1234)
+    m = _Dummy()
+
+    # Train with per-sample tensor outputs (N,2,2) -> internal (N,4)
+    X_train = rng.normal(size=(5, 3))
+    y_train = rng.normal(size=(5, 2, 2))
+    m.train_init(X_train, y_train)
+
+    # Test with a *single* sample, but y_test provided as (2,2) (missing sample axis)
+    X_test = rng.normal(size=(1, 3))
+    y_test = rng.normal(size=(2, 2))
+
+    # Should not raise; metamodel.test should normalize y_test to (1,4)
+    m.test(X_test=X_test, y_test=y_test)
