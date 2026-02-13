@@ -26,3 +26,16 @@ def test_r2_simple_matches_flattened():
 
     # r2_score_simple should equal sklearn when both are flattened
     assert np.allclose(r2_score_simple(y_true, y_pred), sk_r2(y_true.ravel(), y_pred.ravel()))
+
+
+def test_r2_flattens_tensor_outputs_per_sample():
+    rng = np.random.default_rng(789)
+    N = 25
+    # Simulate per-sample tensor QoI output (e.g., 2x2 per sample)
+    y_true = rng.normal(size=(N, 2, 2))
+    y_pred = y_true * 0.9 + 0.05
+
+    # Our r2_score should behave like sklearn on the flattened (N, 4) view
+    util_r2 = r2_score(y_true, y_pred)
+    sk_r2_val = sk_r2(y_true.reshape(N, -1), y_pred.reshape(N, -1))
+    assert np.allclose(util_r2, sk_r2_val, atol=1e-12)

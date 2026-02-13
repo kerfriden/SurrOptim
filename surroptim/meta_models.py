@@ -18,6 +18,26 @@ class metamodel:
             raise ValueError("No training data X provided")
         if y is None:
             raise ValueError("No training data y provided")
+        X = np.asarray(X)
+        y = np.asarray(y)
+
+        # Normalize shapes:
+        # - X is always treated as (N, dim)
+        # - y is always treated as (N, n_out)
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
+        if y.ndim == 0:
+            y = y.reshape(1, 1)
+        elif y.ndim == 1:
+            y = y.reshape(-1, 1)
+        elif y.ndim > 2:
+            # Treat the first axis as samples and flatten the remaining axes
+            y = y.reshape(y.shape[0], -1)
+
+        # Handle common accidental transpose: (n_out, N) instead of (N, n_out)
+        if X.ndim == 2 and y.ndim == 2 and y.shape[0] != X.shape[0] and y.shape[1] == X.shape[0]:
+            y = y.T
+
         self.X = X
         self.y = y
         self.dim = X.shape[1]

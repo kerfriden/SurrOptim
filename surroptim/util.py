@@ -17,6 +17,17 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray, multioutput: str = "uniform
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
+    # Support per-sample tensor outputs by flattening output dimensions.
+    # Example: (N, 2, 2) -> (N, 4)
+    if y_true.ndim > 2:
+        y_true = y_true.reshape(y_true.shape[0], -1)
+    if y_pred.ndim > 2:
+        # Prefer matching the sample axis when possible
+        if y_true.ndim >= 1 and y_pred.shape[0] == y_true.shape[0]:
+            y_pred = y_pred.reshape(y_pred.shape[0], -1)
+        else:
+            y_pred = y_pred.reshape(y_pred.shape[0], -1)
+
     # Try to auto-correct common transpose mismatch (n_out, N) vs (N, n_out)
     if y_true.shape != y_pred.shape:
         try:
