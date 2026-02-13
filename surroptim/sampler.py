@@ -413,6 +413,24 @@ class sampler_legacy_cls:
         """Alias for unit_to_phys."""
         return self.unit_to_phys(z_or_Z, clip=clip)
 
+    def unit_to_phy(self, z_or_Z, *, clip=False):
+        """Alias for unit_to_phys (short name)."""
+        return self.unit_to_phys(z_or_Z, clip=clip)
+
+    def phys_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        """Legacy sampler has no gaussian-space transform support."""
+        raise NotImplementedError(
+            "Gaussian-space transforms are not available in sampler_legacy_cls; "
+            "use the params-based sampler_cls with a params processor that implements gaussian transforms."
+        )
+
+    def gauss_to_phys(self, g_or_G, *, clip=False):
+        """Legacy sampler has no gaussian-space transform support."""
+        raise NotImplementedError(
+            "Gaussian-space transforms are not available in sampler_legacy_cls; "
+            "use the params-based sampler_cls with a params processor that implements gaussian transforms."
+        )
+
     def _evaluate_batch(self, X: np.ndarray) -> np.ndarray:
         """Evaluate all samples at once."""
         if self.qoi_fn is None:
@@ -527,6 +545,7 @@ class sampler_cls:
         DOE_type: Optional[str] = None,
         qoi_receive_packed: bool = False,
         qoi_force_2d: bool = False,
+        qoi_flat_key: Optional[str] = None,
     ):
         # params is expected to encapsulate parameter layout and optionally
         # metadata like n_out. Accept qoi_fn and active_keys as explicit
@@ -539,6 +558,9 @@ class sampler_cls:
         # If True, ensure all array inputs passed to QoI are 2D (M, d), even for single samples.
         # This helps with ML models (sklearn/torch) that expect 2D inputs.
         self.qoi_force_2d = bool(qoi_force_2d)
+        # If set, non-dict QoI outputs are treated as if they were returned
+        # as a single entry in a dict under this key (enables qoi_slices/qoi_indices).
+        self.qoi_flat_key = qoi_flat_key
         self.seed = int(seed) if seed is not None else None
         # If False (default), expand packed representations to the full base
         # parameter array before calling `qoi_fn` so QoIs see the same full
@@ -710,7 +732,17 @@ class sampler_cls:
         else:
             arr = np.asarray(qval)
             self.qoi_dim = int(arr.size) if arr.size is not None else int(np.max(arr.shape))
-            self._qoi_layout = None
+            if self.qoi_flat_key is not None:
+                self._qoi_layout = [
+                    {
+                        "key": self.qoi_flat_key,
+                        "shape": arr.shape,
+                        "size": int(self.qoi_dim),
+                        "sl": slice(0, int(self.qoi_dim)),
+                    }
+                ]
+            else:
+                self._qoi_layout = None
             self.n_out = self.qoi_dim
 
     def _build_qoi_layout(self, qoi_dict: dict) -> None:
@@ -725,6 +757,49 @@ class sampler_cls:
             cursor += size
         self._qoi_layout = layout
         self.qoi_dim = cursor
+
+    def ravel_qoi_dict(self, qoi_dict: dict, keys=None) -> np.ndarray:
+        """Flatten a QoI output dict into a 1D vector.
+
+        This mirrors the internal dict-flattening used during sequential/batch
+        QoI evaluation.
+
+        Ordering:
+        - If a QoI layout exists (built during `_detect_n_out()` or from prior
+          samples), that key order is used.
+        - Otherwise, insertion order of `qoi_dict` is used and a layout is built
+          from this dict.
+
+        Args:
+            qoi_dict: Mapping key -> scalar/array-like QoI value for a *single* sample.
+            keys: Optional explicit key order (string or sequence). If provided,
+                overrides stored layout ordering.
+
+        Returns:
+            1D numpy array containing all values concatenated.
+        """
+        if not isinstance(qoi_dict, dict):
+            raise TypeError(f"Expected a dict, got {type(qoi_dict).__name__}")
+
+        layout = getattr(self, "_qoi_layout", None)
+
+        if keys is None:
+            if layout is not None:
+                key_order = [it["key"] for it in layout]
+            else:
+                # Fall back to insertion order and build a layout for consistency.
+                key_order = list(qoi_dict.keys())
+                self._build_qoi_layout(qoi_dict)
+        else:
+            if isinstance(keys, str):
+                key_order = [keys]
+            else:
+                key_order = list(keys)
+
+        parts = [np.asarray(qoi_dict[k]).ravel() for k in key_order]
+        if not parts:
+            return np.array([], dtype=float)
+        return np.concatenate(parts)
 
     def qoi_slices(self, keys):
         """Return slice(s) into the flattened QoI vector for key(s).
@@ -929,6 +1004,10 @@ class sampler_cls:
         if hasattr(self.params, "unit_to_physical"):
             return self.params.unit_to_physical(z_or_Z, clip=clip)
         raise AttributeError("params processor has no method 'reference_to_physical' or 'unit_to_physical'")
+
+    def unit_to_phy(self, z_or_Z, *, clip=False):
+        """Alias for unit_to_phys (short name)."""
+        return self.unit_to_phys(z_or_Z, clip=clip)
 
     def unit_to_gauss(self, z_or_Z, *, eps=None):
         """Convert from unit/reference space [-1, 1] to Gaussian space.
@@ -1144,7 +1223,19 @@ class sampler_cls:
                 raise NotImplementedError(
                     "Batch evaluation not implemented for dict-style QoIs without params.unpack (use sequential evaluation)"
                 )
-            return _normalize_batched_array(out, X.shape[0])
+            arr2 = _normalize_batched_array(out, X.shape[0])
+            if getattr(self, "qoi_flat_key", None) is not None:
+                n_out = int(self.n_out) if self.n_out is not None else int(arr2.shape[1])
+                self.qoi_dim = int(n_out)
+                self._qoi_layout = [
+                    {
+                        "key": self.qoi_flat_key,
+                        "shape": (n_out,),
+                        "size": n_out,
+                        "sl": slice(0, n_out),
+                    }
+                ]
+            return arr2
         except TypeError as e:
             raise TypeError(f"QoI evaluation failed: {e}") from e
 
@@ -1202,6 +1293,17 @@ class sampler_cls:
                     if Y is None:
                         out_arr = np.asarray(out).ravel()
                         self.n_out = len(out_arr)
+                        self.qoi_dim = int(self.n_out)
+                        if getattr(self, "qoi_flat_key", None) is not None and getattr(self, "_qoi_layout", None) is None:
+                            n_out = int(self.n_out)
+                            self._qoi_layout = [
+                                {
+                                    "key": self.qoi_flat_key,
+                                    "shape": np.asarray(out).shape,
+                                    "size": n_out,
+                                    "sl": slice(0, n_out),
+                                }
+                            ]
                         Y = np.zeros((len(X), self.n_out))
                         Y[i, :] = out_arr
                     else:

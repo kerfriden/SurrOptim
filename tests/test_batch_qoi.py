@@ -87,6 +87,35 @@ def test_qoi_dict_output_and_key_index():
     assert np.allclose(sampler.Y[:, sl_v], np.vstack([sampler.X[:, 0], sampler.X[:, 1]]).T)
 
 
+def test_ravel_qoi_dict_helper_matches_layout_order():
+    init_array = np.array([1.0, 0.0, 0.0])
+    active_specs = {
+        "a0": {"select": np.array([1, 0, 0], bool), "lower": np.exp(-2.0), "upper": np.exp(2.0), "scale": "log"},
+        "a1": {"select": np.array([0, 1, 0], bool), "lower": -2.0, "upper": 2.0, "scale": "linear"},
+    }
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    # Ensure a dict-returning QoI so sampler builds a layout
+    def qoi_dict(arr):
+        a = np.asarray(arr)
+        if a.ndim == 2:
+            s = np.sum(a, axis=1)
+            v = a[:, :2]
+            return {"s": s, "v": v}
+        return {"s": np.array([a.sum()]), "v": np.array([a[0], a[1]])}
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=20, qoi_fn=qoi_dict)
+    sampler.sample(N=2, as_additional_points=False, batch_computation=True)
+
+    # External dict (single-sample) -> should flatten in sampler layout order
+    q = {"s": np.array([3.0]), "v": np.array([10.0, 20.0])}
+    y = sampler.ravel_qoi_dict(q)
+
+    expected = np.concatenate([np.asarray(q[k]).ravel() for k in ["s", "v"]])
+    assert y.shape == (sampler.qoi_dim,)
+    assert np.allclose(y, expected)
+
+
 def test_qoi_dict_with_flat_key():
     init_array = np.array([1.0, 0.0, 0.0])
     active_specs = {
@@ -204,3 +233,39 @@ def test_qoi_force_2d_makes_single_sample_2d():
 
     assert len(called["ndims"]) >= 1
     assert s.Y.shape == (3, 1)
+
+
+def test_qoi_can_return_matrix_and_flat_key_exposes_slice():
+    init_array, active_specs = _base_specs()
+    P = params_cls(init_params=init_array, active_specs=active_specs)
+
+    # Return a 2x2 matrix per sample (batched -> (M,2,2))
+    def qoi_matrix(x):
+        a = np.asarray(x)
+        if a.ndim == 2:
+            # build a simple per-sample 2x2 matrix from inputs
+            m = a.shape[0]
+            out = np.zeros((m, 2, 2), dtype=float)
+            out[:, 0, 0] = a[:, 0]
+            out[:, 0, 1] = a[:, 1]
+            out[:, 1, 0] = a[:, 0] + a[:, 1]
+            out[:, 1, 1] = 1.0
+            return out
+        # single-sample
+        return np.array([[a[0], a[1]], [a[0] + a[1], 1.0]], dtype=float)
+
+    sampler = sampler_new_cls(params=P, DOE_type="QRS", seed=30, qoi_fn=qoi_matrix, qoi_flat_key="K")
+    sampler.sample(N=5, as_additional_points=False, batch_computation=True)
+
+    sl = sampler.qoi_slices("K")
+    assert sl == slice(0, 4)
+    assert sampler.Y.shape == (5, 4)
+
+    # Expected flattening: each 2x2 matrix ravelled row-major
+    X = sampler.X
+    expected = np.zeros((X.shape[0], 4), dtype=float)
+    expected[:, 0] = X[:, 0]
+    expected[:, 1] = X[:, 1]
+    expected[:, 2] = X[:, 0] + X[:, 1]
+    expected[:, 3] = 1.0
+    assert np.allclose(sampler.Y, expected)
