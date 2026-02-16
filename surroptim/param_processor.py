@@ -169,10 +169,25 @@ class ParameterProcessor:
     `dim`.
     """
 
-    def __init__(self, init_params, active_specs: dict, *, verbose=False, log=print, eps=1e-12):
+    def __init__(
+        self,
+        init_params,
+        active_specs: dict | None = None,
+        *,
+        active_params: dict | None = None,
+        verbose=False,
+        log=print,
+        eps=1e-12,
+    ):
         self.verbose = verbose
         self.log = log
         self.eps = float(eps)
+
+        # Backward-compatible naming: allow `active_params` in place of `active_specs`.
+        if active_specs is None:
+            active_specs = active_params
+        if active_specs is None:
+            raise ValueError("active_specs (or alias active_params) must be provided")
 
             # Placeholder for future implementation
         if isinstance(init_params, np.ndarray):
@@ -626,28 +641,53 @@ class params_cls(ParameterProcessor):
     Constructor-style params helper.
 
     Preferred usage: instantiate with `params_cls(init_params=..., active_specs=...)`.
+    Alias: `active_params` can be used in place of `active_specs`.
     Backwards-compatible with previous `Params_cls` subclassing pattern.
     """
-    def __init__(self, init_params: dict | None = None, active_specs: dict | None = None, *, verbose=False, log=print, eps=1e-12):
+    def __init__(
+        self,
+        init_params: dict | None = None,
+        active_specs: dict | None = None,
+        *,
+        active_params: dict | None = None,
+        verbose=False,
+        log=print,
+        eps=1e-12,
+    ):
         # Allow legacy subclasses to set params0/active_specs_input (handled by passing None)
         if init_params is None:
             init_params = getattr(self, "params0", None)
         if active_specs is None:
+            # Prefer explicit alias `active_params` if provided
+            active_specs = active_params
+        if active_specs is None:
+            # Legacy subclass/config attribute fallbacks
             active_specs = getattr(self, "active_specs_input", None)
             if active_specs is None:
+                active_specs = getattr(self, "active_params_input", None)
+            if active_specs is None:
                 active_specs = getattr(self, "active_specs", None)
+            if active_specs is None:
+                active_specs = getattr(self, "active_params", None)
 
         if init_params is None or active_specs is None:
             raise ValueError("Provide init_params/active_specs or set self.params0 and self.active_specs_input in the subclass before super().__init__()")
 
         self.init_params = init_params
+        # Keep both names for introspection/back-compat.
         self.active_specs_input = active_specs
+        self.active_params_input = active_specs
         super().__init__(init_params, active_specs, verbose=verbose, log=log, eps=eps)
 
     @property
     def active_specs(self):
         """Resolved specs (after last-wins trimming)."""
         return self.specs
+
+    @property
+    def active_params(self):
+        """Alias for `active_specs` (resolved specs)."""
+        return self.active_specs
 
     def describe_layout(self):
         lines = [f"dim = {self.dim}"]

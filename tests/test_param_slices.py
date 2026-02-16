@@ -36,3 +36,18 @@ def test_parameter_slices_and_indices_dict_mode():
     idxs = P.parameter_indices(["A0", "A1"])
     expected = np.concatenate([np.arange(sl_A0.start, sl_A0.stop), np.arange(sl_A1.start, sl_A1.stop)])
     assert np.array_equal(idxs, expected)
+
+
+def test_params_accepts_active_params_alias():
+    init_params = {
+        "E": 210.0,
+        "A": np.array([0.2, 5.0, 7.0]),
+    }
+    active_params = {
+        "E": {"lower": 100.0, "upper": 300.0, "scale": "linear", "select": None},
+        "A0": {"param": "A", "select": np.array([1, 0, 0], bool), "lower": 0.0, "upper": 1.0, "scale": "linear"},
+    }
+
+    P = params_cls(init_params=init_params, active_params=active_params)
+    assert P.dim == 2
+    assert P.active_params == P.active_specs
