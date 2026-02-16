@@ -465,6 +465,21 @@ class sampler_legacy_cls:
             "use the params-based sampler_cls with a params processor that implements gaussian transforms."
         )
 
+    def physical_to_gaussian(self, x_or_X, *, clip=False, eps=None):
+        """Alias for phys_to_gauss (legacy sampler raises NotImplementedError)."""
+        return self.phys_to_gauss(x_or_X, clip=clip, eps=eps)
+
+    def reference_to_gauss(self, z_or_Z, *, eps=None):
+        """Alias for unit_to_gauss (legacy sampler raises NotImplementedError)."""
+        raise NotImplementedError(
+            "Gaussian-space transforms are not available in sampler_legacy_cls; "
+            "use the params-based sampler_cls with a params processor that implements gaussian transforms."
+        )
+
+    def reference_to_gaussian(self, z_or_Z, *, eps=None):
+        """Alias for reference_to_gauss (legacy sampler raises NotImplementedError)."""
+        return self.reference_to_gauss(z_or_Z, eps=eps)
+
     def gauss_to_phys(self, g_or_G, *, clip=False):
         """Legacy sampler has no gaussian-space transform support."""
         raise NotImplementedError(
@@ -1167,6 +1182,14 @@ class sampler_cls:
             return self.params.unit_to_gauss(z_or_Z, eps=eps) if eps is not None else self.params.unit_to_gauss(z_or_Z)
         raise AttributeError("params processor has no method 'unit_to_gauss'")
 
+    def reference_to_gauss(self, z_or_Z, *, eps=None):
+        """Alias for unit_to_gauss."""
+        return self.unit_to_gauss(z_or_Z, eps=eps)
+
+    def reference_to_gaussian(self, z_or_Z, *, eps=None):
+        """Alias for unit_to_gauss (legacy naming)."""
+        return self.unit_to_gauss(z_or_Z, eps=eps)
+
     def gauss_to_unit(self, g_or_G):
         """Convert from Gaussian space to unit/reference space [-1, 1].
         
@@ -1187,6 +1210,10 @@ class sampler_cls:
         # Compose: physical -> unit -> gauss
         z = self.phys_to_unit(x_or_X, clip=clip)
         return self.unit_to_gauss(z, eps=eps)
+
+    def physical_to_gaussian(self, x_or_X, *, clip=False, eps=None):
+        """Alias for phys_to_gauss (legacy naming)."""
+        return self.phys_to_gauss(x_or_X, clip=clip, eps=eps)
 
     def gauss_to_phys(self, g_or_G, *, clip=False):
         """Convert from Gaussian space to physical space.

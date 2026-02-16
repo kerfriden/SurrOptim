@@ -519,6 +519,24 @@ class ParameterProcessor:
         """Alias for `physical_to_gaussian` for callers expecting `physical_to_gauss`."""
         return self.physical_to_gaussian(x_or_X, clip=clip, eps=eps)
 
+    # Canonical short-name API: phys -> gauss
+    def phys_to_gauss(self, x_or_X, *, clip=False, eps=None):
+        """Alias for `physical_to_gauss` (canonical short name)."""
+        return self.physical_to_gauss(x_or_X, clip=clip, eps=eps)
+
+    def phys_to_gaussian(self, x_or_X, *, clip=False, eps=None):
+        """Alias for `physical_to_gaussian` (canonical short name)."""
+        return self.physical_to_gaussian(x_or_X, clip=clip, eps=eps)
+
+    # Backward-compatible alias: reference/unit -> gaussian
+    def reference_to_gauss(self, z_or_Z, *, eps=None):
+        """Alias for `unit_to_gauss` for callers expecting `reference_to_gauss`."""
+        return self.unit_to_gauss(z_or_Z, eps=eps)
+
+    def reference_to_gaussian(self, z_or_Z, *, eps=None):
+        """Alias for `unit_to_gauss` for callers expecting `reference_to_gaussian`."""
+        return self.unit_to_gauss(z_or_Z, eps=eps)
+
     def gauss_to_physical(self, g_or_G, *, clip=False):
         return self.unit_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
 

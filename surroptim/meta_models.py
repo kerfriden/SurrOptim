@@ -12,6 +12,8 @@ class metamodel:
         self.y = None
         self.X_test = None
         self.y_test = None
+        self.r2_train = None
+        self.r2_test = None
 
     def train_init(self, X: np.ndarray, y: np.ndarray) -> None:
         if X is None:
@@ -49,9 +51,21 @@ class metamodel:
     def predict(self, X: np.ndarray) -> np.ndarray:
         raise NotImplementedError("predict must be implemented in subclasses")
 
-    def test(self, X_test: np.ndarray = None, y_test: np.ndarray = None) -> None:
+    def test(self, X_test: np.ndarray = None, y_test: np.ndarray = None):
         if self.X is None or self.y is None:
             raise ValueError("Training not done so far")
+
+        # Always compute and report train R2
+        y_train_pred = self.predict(self.X)
+        r2_train = r2_score(self.y, y_train_pred)
+        self.r2_train = r2_train
+        print("R2 score train set :", r2_train)
+
+        # If no test data provided, only return train R2.
+        if X_test is None and y_test is None:
+            return r2_train
+
+        # If only one is provided, that's an error.
         if X_test is None:
             raise ValueError("No test dataset X_test provided")
         if y_test is None:
@@ -80,8 +94,9 @@ class metamodel:
         self.X_test = X_test
         self.y_test = y_test
 
-        y_train_pred = self.predict(self.X)
-        print("R2 score train set :", r2_score(self.y, y_train_pred))
-
         y_test_pred = self.predict(self.X_test)
-        print("R2 score test set :", r2_score(self.y_test, y_test_pred))
+        r2_test = r2_score(self.y_test, y_test_pred)
+        self.r2_test = r2_test
+        print("R2 score test set :", r2_test)
+
+        return (r2_train, r2_test)
