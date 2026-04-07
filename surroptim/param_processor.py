@@ -414,30 +414,6 @@ class ParameterProcessor:
         """Canonical short-name alias for `physical_to_unit`."""
         return self.physical_to_unit(x_or_X, clip=clip)
 
-    # Backwards-compatible alias (kept for external callers)
-    def physical_to_unit(self, x_or_X, *, clip=False):
-        """Alias retained for backward compatibility (calls `phys_to_unit`)."""
-        X, is_batch = self._as_X(x_or_X)
-        # Original implementation preserved here for performance/readability
-        Z = np.zeros_like(X)
-
-        for it in self._layout:
-            sl, lo, hi, distribution = it["sl"], it["lo"], it["hi"], it["distribution"]
-            Y = X[:, sl]
-            if clip:
-                Y = np.clip(Y, lo, hi)
-
-            if distribution == "linear":
-                t = (Y - lo) / (hi - lo)
-            else:  # log
-                if np.any(Y <= 0):
-                    raise ValueError(f"'{it['var_id']}': log distribution requires values > 0")
-                t = (np.log(Y) - it["loglo"]) / (it["loghi"] - it["loglo"]) 
-
-            Z[:, sl] = 2.0 * t - 1.0
-
-        return Z if is_batch else Z[0]
-
     def reference_to_physical(self, z_or_Z, *, clip=False):
         """Map reference/unit values in [-1, 1] back to physical parameter values.
 
@@ -553,6 +529,15 @@ class ParameterProcessor:
         return self.unit_to_gauss(z_or_Z, eps=eps)
 
     def gauss_to_physical(self, g_or_G, *, clip=False):
+        """Convert gaussian-space values to physical packed values.
+
+        This intentionally chains:
+          gaussian -> unit/reference via `gauss_to_unit` (CDF)
+          unit/reference -> physical via `unit_to_physical` (bounds scaling)
+
+        Note: `unit_to_gauss` is the inverse direction (PPF) and is not part of
+        this conversion.
+        """
         return self.unit_to_physical(self.gauss_to_unit(g_or_G), clip=clip)
 
     # ---- convenience: reference -> dict and gauss -> dict ----
