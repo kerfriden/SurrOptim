@@ -1,7 +1,3 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 import numpy as np
 import matplotlib.pyplot as plt
 from surroptim.sampler import sampler_cls
@@ -106,8 +102,7 @@ def test_sampler_uniform():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        qoi_fn=simple_qoi,
-        n_out=2
+        qoi_fn=simple_qoi
     )
     
     sampler.sample(N=20)
@@ -134,8 +129,7 @@ def test_sampler_loguniform():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        qoi_fn=simple_qoi_1d,
-        n_out=2
+        qoi_fn=simple_qoi_1d
     )
     
     sampler.sample(N=20)
@@ -173,8 +167,7 @@ def test_sampler_sigmoid_qoi():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        qoi_fn=sigmoid_qoi,
-        n_out=2
+        qoi_fn=sigmoid_qoi
     )
 
     sampler.sample(N=20)
@@ -195,8 +188,7 @@ def test_sampler_normalisation():
     
     sampler = sampler_cls(
         distributions=distributions,
-        bounds=bounds,
-        n_out=1
+        bounds=bounds
     )
     
     # Create test samples in physical space
@@ -230,8 +222,7 @@ def test_sampler_incremental_sampling():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        qoi_fn=simple_qoi_1d,
-        n_out=2
+        qoi_fn=simple_qoi_1d
     )
     
     # First batch
@@ -270,8 +261,7 @@ def test_sampler_sg():
     sampler = sampler_cls(
         distributions=distributions,
         bounds=bounds,
-        qoi_fn=simple_qoi,
-        n_out=2
+        qoi_fn=simple_qoi
     )
     
     sampler.sample(N=3)
@@ -376,8 +366,7 @@ def plot_all_tests():
     sampler_uniform = sampler_cls(
         distributions=['uniform', 'uniform'],
         bounds=[[0, 1], [0, 2]],
-        qoi_fn=simple_qoi,
-        n_out=2
+        qoi_fn=simple_qoi
     )
     sampler_uniform.sample(N=30)
     scatter = axes[1, 1].scatter(sampler_uniform.X[:, 0], sampler_uniform.X[:, 1], 

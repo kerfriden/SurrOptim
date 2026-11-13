@@ -41,8 +41,8 @@ def test_array_init_sampler_compatibility():
     # QoI expects a params-dict and reads '__arr'
     # QoI expects a numpy array input when params created from ndarray
     def qoi_arr(arr):
-        s = float(arr[0]) + float(arr[1])
-        return np.array([[s, 0.5]])
+        a = np.atleast_2d(arr)  # single sample (dim,) or batch (N, dim)
+        return np.column_stack((a[:, 0] + a[:, 1], np.full(len(a), 0.5)))
 
     sampler = sampler_cls(params=P, DOE_type="QRS", seed=0, qoi_fn=qoi_arr)
     sampler.sample(N=4, as_additional_points=False, batch_computation=True)
@@ -79,7 +79,8 @@ def test_array_init_variant_select_and_vector_bounds():
     # run sampler compatibility: QoI reads '__arr'
     # QoI accepts flat numpy array for array-mode params
     def qoi_arr(arr):
-        return np.array([[float(arr[0] + arr[1] + arr[2])]])
+        a = np.atleast_2d(arr)  # single sample (dim,) or batch (N, dim)
+        return a.sum(axis=1, keepdims=True)
 
     sampler = sampler_cls(params=P, DOE_type="QRS", seed=1, qoi_fn=qoi_arr)
     sampler.sample(N=5, as_additional_points=False, batch_computation=True)

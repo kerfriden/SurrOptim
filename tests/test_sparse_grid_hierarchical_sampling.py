@@ -5,9 +5,6 @@ This module verifies that when using sparse grids with incremental refinement
 (e.g., level=5 then level=6), only the delta points are computed, not the entire
 grid from scratch.
 """
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
 import pytest
@@ -42,7 +39,7 @@ def test_legacy_sampler_hierarchical_sparse_grid(capsys):
     bounds = create_bounds(dim=3, lb=-2.0, ub=2.0)
     distributions = create_distributions(dim=3, dist='uniform')
     sampler = sampler_legacy_cls(bounds=bounds, distributions=distributions, 
-                                 qoi_fn=qoi_function, doe_type='SG', n_out=1)
+                                 qoi_fn=qoi_function, doe_type='SG')
     
     # First sampling at level 3
     sampler.sample(level=3, plot=False)
@@ -133,7 +130,7 @@ def test_sparse_grid_level_increment_details(capsys):
     bounds = create_bounds(dim=2, lb=-1.0, ub=1.0)
     distributions = create_distributions(dim=2, dist='uniform')
     sampler = sampler_legacy_cls(bounds=bounds, distributions=distributions,
-                                 qoi_fn=qoi_function, doe_type='SG', n_out=1)
+                                 qoi_fn=qoi_function, doe_type='SG')
     
     # Sample at level 5
     sampler.sample(level=5, plot=False)
@@ -173,7 +170,7 @@ def test_sparse_grid_no_hierarchical_when_not_requested(capsys):
     bounds = create_bounds(dim=2, lb=-1.0, ub=1.0)
     distributions = create_distributions(dim=2, dist='uniform')
     sampler = sampler_legacy_cls(bounds=bounds, distributions=distributions,
-                                 qoi_fn=qoi_function, doe_type='SG', n_out=1)
+                                 qoi_fn=qoi_function, doe_type='SG')
     
     # Sample at level 3
     sampler.sample(level=3, plot=False)
@@ -201,7 +198,7 @@ def test_both_samplers_produce_same_hierarchical_behavior():
     bounds_legacy = create_bounds(dim=2, lb=-1.0, ub=1.0)
     distributions_legacy = create_distributions(dim=2, dist='uniform')
     sampler_legacy = sampler_legacy_cls(bounds=bounds_legacy, distributions=distributions_legacy,
-                                        qoi_fn=qoi_function, doe_type='SG', n_out=1)
+                                        qoi_fn=qoi_function, doe_type='SG')
     sampler_legacy.sample(level=3, plot=False)
     n_legacy_l3 = len(sampler_legacy.X_reference)  # Total samples after level 3
     sampler_legacy.sample(level=4, as_additional_samples=True, plot=False)
