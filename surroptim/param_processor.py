@@ -512,18 +512,35 @@ class ParameterProcessor:
         Unless `clip=True`, each such value is replaced by the default value
         of its parameter (midpoint of the bounds: arithmetic for 'linear',
         geometric for 'log') and a warning is issued.
+
+        A value exactly on a bound is kept, with a warning: it maps to the
+        clipped tail of the gaussian (about +/-7 for eps=1e-12), where the
+        map is flat, so gradient-based optimizers can hardly move it.
         """
         if not clip:
             x_or_X = self._default_out_of_bounds(x_or_X)
         return self.unit_to_gauss(self.physical_to_unit(x_or_X, clip=clip), eps=eps)
 
     def _default_out_of_bounds(self, x_or_X):
-        """Replace out-of-bounds physical values by the bounds midpoint, with a warning."""
+        """Replace out-of-bounds physical values by the bounds midpoint, with a warning.
+
+        Also warns (without changing the value) for values exactly on a bound.
+        """
         X, is_batch = self._as_X(x_or_X)
         X = X.copy()
         for it in self._layout:
             sl, lo, hi = it["sl"], it["lo"], it["hi"]
             Y = X[:, sl]
+            on_bound = (Y == lo) | (Y == hi)
+            for row, col in zip(*np.nonzero(on_bound)):
+                warnings.warn(
+                    f"'{it['var_id']}' = {Y[row, col]:.6g} lies exactly on a bound of "
+                    f"[{lo[col]:.6g}, {hi[col]:.6g}]; its gaussian image is in the flat "
+                    "tail of the map, so optimizers will hardly move it. Start strictly "
+                    "inside the bounds.",
+                    UserWarning,
+                    stacklevel=4,
+                )
             outside = (Y < lo) | (Y > hi)
             if not np.any(outside):
                 continue

@@ -100,3 +100,12 @@ def test_clip_keeps_clipping_behaviour():
         warnings.simplefilter("error")
         g = P.physical_to_gauss(x, clip=True)
     assert P.gauss_to_phys(g)[0] == pytest.approx(300.0, rel=1e-6)
+
+
+def test_value_on_bound_warns_and_is_kept():
+    P = make_params()
+    x = np.array([300.0, 0.0, 1.0, 10.0])   # E on its upper bound, A0 on its lower bound
+    with pytest.warns(UserWarning, match="exactly on a bound") as record:
+        g = P.physical_to_gauss(x)
+    assert len(record) == 2
+    np.testing.assert_allclose(P.gauss_to_phys(g), x, rtol=1e-6, atol=1e-9)
