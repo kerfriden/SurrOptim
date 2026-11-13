@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from math import erf, sqrt
 
@@ -504,7 +506,89 @@ class ParameterProcessor:
 
     # ---- direct physical <-> gaussian ----
     def physical_to_gaussian(self, x_or_X, *, clip=False, eps=None):
+        """Map physical values to gaussian space.
+
+        Values outside their [lower, upper] bounds have no gaussian image.
+        Unless `clip=True`, each such value is replaced by the default value
+        of its parameter (midpoint of the bounds: arithmetic for 'linear',
+        geometric for 'log') and a warning is issued.
+        """
+        if not clip:
+            x_or_X = self._default_out_of_bounds(x_or_X)
         return self.unit_to_gauss(self.physical_to_unit(x_or_X, clip=clip), eps=eps)
+
+    def _default_out_of_bounds(self, x_or_X):
+        """Replace out-of-bounds physical values by the bounds midpoint, with a warning."""
+        X, is_batch = self._as_X(x_or_X)
+        X = X.copy()
+        for it in self._layout:
+            sl, lo, hi = it["sl"], it["lo"], it["hi"]
+            Y = X[:, sl]
+            outside = (Y < lo) | (Y > hi)
+            if not np.any(outside):
+                continue
+            default = np.broadcast_to(_default_midpoint(lo, hi, it["distribution"]), Y.shape)
+            for row, col in zip(*np.nonzero(outside)):
+                warnings.warn(
+                    f"'{it['var_id']}' = {Y[row, col]:.6g} is outside its bounds "
+                    f"[{lo[col]:.6g}, {hi[col]:.6g}]; using the default value "
+                    f"{default[row, col]:.6g} ({it['distribution']} midpoint) instead.",
+                    UserWarning,
+                    stacklevel=4,
+                )
+            Y[outside] = default[outside]
+            X[:, sl] = Y
+        return X if is_batch else X[0]
+
+    # ---- derivatives of the gaussian -> physical map ----
+    def gauss_to_phys_jacobian(self, g_or_G):
+        """Diagonal of d(physical)/d(gaussian) at gaussian point(s).
+
+        The map is elementwise, so its Jacobian is diagonal; the diagonal is
+        returned with the same shape as the input: (dim,) or (M, dim).
+
+            linear: phys = lo + Phi(g) (hi - lo)       -> phi(g) (hi - lo)
+            log:    phys = lo (hi/lo)^Phi(g)           -> phi(g) phys log(hi/lo)
+
+        with Phi / phi the standard normal CDF / density.
+        """
+        G, is_batch = self._as_X(g_or_G)
+        density = np.exp(-0.5 * G**2) / np.sqrt(2.0 * np.pi)
+        phys = self.gauss_to_physical(G)
+        D = np.empty_like(G)
+        for it in self._layout:
+            sl, lo, hi = it["sl"], it["lo"], it["hi"]
+            if it["distribution"] == "linear":
+                D[:, sl] = density[:, sl] * (hi - lo)
+            else:  # log
+                D[:, sl] = density[:, sl] * phys[:, sl] * (it["loghi"] - it["loglo"])
+        return D if is_batch else D[0]
+
+    def phys_grad_to_gauss_grad(self, g_or_G, grad_phys):
+        """Chain rule: gradient w.r.t. physical parameters -> w.r.t. gaussian variables.
+
+        `grad_phys` is either a packed array (same shape as `g_or_G`) or, for
+        a single point, a dict {var_id: derivative} with one entry per active
+        variable (see `active_names`).
+        """
+        if isinstance(grad_phys, dict):
+            missing = [name for name in self.active_names if name not in grad_phys]
+            if missing:
+                raise KeyError(f"Gradient missing for active parameters {missing}.")
+            packed = np.zeros(self.dim, dtype=float)
+            for it in self._layout:
+                packed[it["sl"]] = np.asarray(grad_phys[it["var_id"]], dtype=float).ravel()
+            grad_phys = packed
+        grad_phys = np.asarray(grad_phys, dtype=float)
+        jac = self.gauss_to_phys_jacobian(g_or_G)
+        if grad_phys.shape != jac.shape:
+            raise ValueError(f"grad_phys shape {grad_phys.shape} != {jac.shape}")
+        return grad_phys * jac
+
+    @property
+    def active_names(self):
+        """Active variable ids, in packed-vector order."""
+        return [it["var_id"] for it in self._layout]
 
     def physical_to_gauss(self, x_or_X, *, clip=False, eps=None):
         """Alias for `physical_to_gaussian` for callers expecting `physical_to_gauss`."""
